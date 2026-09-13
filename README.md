@@ -19,13 +19,6 @@ les scripts de ce dépôt**. Rien n'est téléchargé.
 Premier chargement ~80 Mo (une à deux minutes), ensuite tout est en cache.
 Au casque, dans le noir.
 
-### Build Windows — un seul fichier
-
-Télécharger `RESPIRE-windows.exe` depuis la page ci-dessus ou depuis les
-builds du dépôt, puis double-cliquer. Pas de Godot, pas d'installation.
-Windows SmartScreen prévient que l'exécutable n'est pas signé :
-*Informations complémentaires* → *Exécuter quand même*.
-
 ### Depuis les sources
 
 Il faut **Godot 4.3** (standard, pas .NET) : https://godotengine.org/download
