@@ -19,6 +19,14 @@ les scripts de ce dépôt**. Rien n'est téléchargé.
 Premier chargement ~80 Mo (une à deux minutes), ensuite tout est en cache.
 Au casque, dans le noir.
 
+### Build Windows — un seul fichier
+
+**https://danx4529.github.io/HorrorGame/RESPIRE-windows.zip** (57 Mo)
+
+Décompresser, double-cliquer `RESPIRE-windows.exe`. Pas de Godot, pas
+d'installation. Windows SmartScreen prévient que l'exécutable n'est pas
+signé : *Informations complémentaires* → *Exécuter quand même*.
+
 ### Depuis les sources
 
 Il faut **Godot 4.3** (standard, pas .NET) : https://godotengine.org/download
@@ -108,6 +116,7 @@ python3 tools/texgen/build_textures.py --res 1024   # 17 matériaux PBR
 python3 tools/blender/build_env.py                  # kit architectural
 python3 tools/blender/build_props.py                # 21 props
 python3 tools/blender/build_entity.py               # la Veilleuse (riggée)
+python3 tools/audio/sources.py                      # banques de sons CC0
 python3 tools/audio/build_audio.py                  # 41 sons
 python3 tools/godot/gen_materials.py                # ressources .tres Godot
 ```
@@ -116,7 +125,7 @@ python3 tools/godot/gen_materials.py                # ressources .tres Godot
 |---|---|
 | `tools/texgen/` | Bruits tuilables (valeur, fBm, Worley, ridged) et recettes PBR |
 | `tools/blender/` | Bibliothèque bmesh, kit d'environnement, props, personnage |
-| `tools/audio/` | DSP numpy et sound design |
+| `tools/audio/` | Récupération des banques CC0, DSP numpy, assemblage de la bande-son |
 | `tools/godot/` | Génération des matériaux Godot |
 | `tools/verify/` | Rendus et tests automatisés (voir ci-dessous) |
 
@@ -141,6 +150,9 @@ python3 tools/verify/spectro.py game/assets/audio/*.wav /tmp/spec.png
 
 # « est-ce un bip ou de la matière ? » — périodicité de chaque son
 python3 tools/verify/tonality.py game/assets/audio/step_*.wav
+
+# la version navigateur démarre-t-elle vraiment ? (Chromium headless)
+python3 tools/verify/webtest.py /tmp/web.png
 
 # inspection de la géométrie, sans post-traitement ni obscurité
 python3 tools/verify/playtest.py geo --tp 10 12 --yaw -90 --light 1.4 --nopost

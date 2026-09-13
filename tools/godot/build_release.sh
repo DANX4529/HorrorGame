@@ -30,13 +30,20 @@ fi
 if [[ "$WHAT" == "deploy" ]]; then
 	echo "==> Publication sur gh-pages"
 	TMP="$(mktemp -d)"
+	# la branche locale gh-pages peut déjà exister d'un déploiement précédent :
+	# on repart d'un arbre détaché et on la recrée à chaque fois.
 	git -C "$ROOT" worktree add --detach "$TMP" -q
-	git -C "$TMP" switch --orphan gh-pages -q
+	git -C "$TMP" checkout --orphan gh-pages-tmp -q
+	git -C "$TMP" rm -rq --cached . 2>/dev/null || true
 	find "$TMP" -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
 	cp -r "$ROOT/build/web/." "$TMP/"
+	# le build Windows est servi depuis la même adresse : une seule URL à retenir
+	if [[ -f "$ROOT/build/RESPIRE-windows.zip" ]]; then
+		cp "$ROOT/build/RESPIRE-windows.zip" "$TMP/"
+	fi
 	git -C "$TMP" add -A
 	git -C "$TMP" commit -q -m "Version jouable dans le navigateur ($(date -u +%Y-%m-%d\ %H:%M) UTC)"
-	git -C "$TMP" push origin gh-pages --force
+	git -C "$TMP" push origin gh-pages-tmp:gh-pages --force
 	git -C "$ROOT" worktree remove --force "$TMP"
 	echo "    -> https://danx4529.github.io/HorrorGame/"
 fi

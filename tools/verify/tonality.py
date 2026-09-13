@@ -44,5 +44,13 @@ if __name__ == "__main__":
     for f in names:
         x, sr = read_wav(f)
         p = periodicity(x, sr)
+        # Deux limites à garder en tête avant de lire ce chiffre :
+        #  - un son VOISÉ (respiration, cri, râle) ou un objet RÉSONANT
+        #    (grincement, battant plein, coeur) est périodique par nature ;
+        #  - un son fortement assombri (grave dominant) monte aussi, car son
+        #    autocorrélation reste large.
+        # La mesure sert à juger les IMPACTS SECS, qui eux ne doivent porter
+        # aucune note. Pour un son traité, comparer à SA source vaut mieux
+        # qu'un seuil absolu.
         v = "BIP" if p > 0.55 else ("limite" if p > 0.38 else "matiere")
         print(f"   {os.path.basename(f)[:-4]:<20} {p:>12.3f}   {v}")
