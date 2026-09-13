@@ -43,6 +43,9 @@ var _cur_anim := ""
 var _spawn_grace := 6.0
 var _last_heard_kind := ""
 var _rng := RandomNumberGenerator.new()
+var _door_ray: RayCast3D
+var _stuck_t := 0.0
+var _stuck_ref := Vector3.ZERO
 
 
 func setup(lvl: Node3D, pl: Player) -> void:
@@ -84,7 +87,17 @@ func _ready() -> void:
 	add_child(_rasp)
 	_rasp.play()
 
+	# Elle ouvre les portes. Une créature qu'un battant arrête n'est pas une
+	# menace — et le grincement qui la précède renseigne le joueur sur sa
+	# position, ce qui rend la traque lisible plutôt qu'arbitraire.
+	_door_ray = RayCast3D.new()
+	_door_ray.target_position = Vector3(0, 0, -1.55)
+	_door_ray.position = Vector3(0, 1.05, 0)
+	_door_ray.collision_mask = 1
+	add_child(_door_ray)
+
 	_build_astar()
+	_stuck_ref = global_position
 	NoiseBus.noise.connect(_on_noise)
 	# la position définitive est posée par Main juste après add_child :
 	# on attend une image avant de calculer la première ronde.
@@ -204,8 +217,44 @@ func _physics_process(delta: float) -> void:
 		Etat.CHASSE: _tick_chasse(delta)
 		Etat.ATTAQUE: _tick_attaque(delta)
 
+	_open_door_ahead()
+	_unstick(delta)
 	_update_audio(delta)
 	_check_catch()
+
+
+## Ouvre le battant qui lui barre la route.
+func _open_door_ahead() -> void:
+	if _door_ray == null or not _door_ray.is_colliding():
+		return
+	var c = _door_ray.get_collider()
+	while c != null and not c.has_method("interact"):
+		c = c.get_parent()
+	if c != null and c.is_in_group("door") and not c.open:
+		c.interact(self)
+
+
+## Filet de sécurité : si elle n'avance plus alors qu'un chemin existe
+## (battant coincé, meuble poussé, angle serré), on recalcule et on la décale
+## légèrement plutôt que de la laisser vibrer contre un mur.
+func _unstick(delta: float) -> void:
+	if _path_i >= _path.size():
+		_stuck_t = 0.0
+		_stuck_ref = global_position
+		return
+	_stuck_t += delta
+	if _stuck_t < 1.2:
+		return
+	var moved := _stuck_ref.distance_to(global_position)
+	_stuck_t = 0.0
+	_stuck_ref = global_position
+	if moved > 0.35:
+		return
+	# vraiment bloquée : on saute le point courant et on recalcule
+	_path_i = mini(_path_i + 2, _path.size())
+	_repath_t = 0.0
+	var side := Vector3(cos(rotation.y), 0, sin(rotation.y)) * 0.25
+	global_position += side
 
 
 func _tick_patrouille(delta: float) -> void:

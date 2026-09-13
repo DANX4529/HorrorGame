@@ -86,7 +86,15 @@ Elle se déplace en écoutant. Elle ne court jamais… sauf quand elle vous a lo
 
 - **PATROUILLE** : parcours de points d'intérêt, lent (1.1 m/s), tête qui pivote.
 - **INVESTIGATION** : se dirige vers le dernier bruit, ralentit, fouille la zone (1.5 m/s).
-- **CHASSE** : ligne droite vers le joueur, rapide (3.4 m/s), respiration audible, musique.
+- **CHASSE** : trajet direct vers le joueur, rapide (3,4 m/s), râle audible, musique.
+
+**Elle ouvre les portes.** Une créature qu'un battant arrête n'est pas une
+menace ; et le grincement de gond qui la précède renseigne le joueur sur sa
+position, ce qui rend la traque lisible plutôt qu'arbitraire.
+
+**Elle ne se coince pas.** Si elle n'avance plus alors qu'un chemin existe
+(vantail bloqué, meuble déplacé, angle serré), elle saute le point de passage
+courant, recalcule et se décale légèrement.
 
 ### Sources de bruit (rayon d'audibilité)
 | Source | Rayon |
@@ -123,8 +131,13 @@ Allumée, elle **révèle** — mais si la Veilleuse a une ligne de vue, la dét
 Clic d'allumage = petit bruit.
 
 ### 5.2 Cachettes
-Casiers métalliques et dessous de lits. Entrer coupe la ligne de vue.
-En cachette : vue au travers des fentes, respiration amplifiée, l'entité peut *fouiller*.
+Vestiaires métalliques, semés dans les pièces et les couloirs. Entrer met le
+joueur hors d'atteinte physique et restreint son champ à celui des ouïes
+d'aération (± 41° de débattement, superposition à l'écran).
+
+Mais la Veilleuse est aveugle : se cacher ne la rend pas sourde. Si elle
+fouille à moins de 1,70 m et que la respiration porte encore à plus de 2 m,
+elle ouvre le casier. **Dans une cachette, l'apnée est la seule défense.**
 
 ### 5.3 Portes
 Ouverture progressive à la souris (maintenir + glisser). Ouvrir vite = grincement = bruit.
@@ -168,11 +181,44 @@ tremblement de caméra, consommation du souffle ×(1 + heart).
 
 ---
 
-## 8. Périmètre du vertical slice
+## 8. Périmètre livré
 
-- [x] 1 niveau : rez-de-chaussée + aile Est + sous-sol (~30 pièces)
-- [x] 1 entité complète avec IA sonore
-- [x] Système de souffle complet
-- [x] Torche, cachettes, portes, ramassage
-- [x] Objectif fusibles + fin de partie (victoire / mort)
-- [x] Écrans titre / pause / mort / victoire
+- [x] **1 niveau de 58 cases de 4 m** (~930 m²), généré depuis une grille
+      textuelle : hall, anneau de couloirs, deux dortoirs, salle de soins,
+      salle d'eau, archives, réserve, chaufferie, monte-charge.
+      Le plan est un **anneau** : le joueur peut toujours contourner.
+- [x] **La Veilleuse** : IA sonore complète, 4 états, A* sur grille
+      d'occupation à 0,50 m, 5 animations, ouverture des portes.
+- [x] **Système de souffle** complet, avec boucle de peur.
+- [x] Torche à batterie et piles, cachettes, portes battantes, ramassage,
+      tableau électrique, monte-charge.
+- [x] Écrans titre / pause / mort / victoire.
+- [x] **Assets intégralement produits par le dépôt** : 17 matériaux PBR
+      procéduraux, 10 modules d'architecture, 21 props, 1 personnage riggé,
+      41 sons synthétisés.
+
+### Ce qui reste ouvert pour une suite
+
+- Un seul étage : pas d'escaliers ni de navigation verticale.
+- Une seule entité et un seul scénario de fin.
+- Pas de sauvegarde, pas de menu d'options.
+- Les casiers sont la seule forme de cachette (pas de dessous-de-lit).
+
+---
+
+## 9. Vérification
+
+Le jeu se teste sans intervention humaine, en rendu logiciel sous Xvfb :
+
+| Outil | Ce qu'il vérifie |
+|---|---|
+| `tools/verify/playtest.py` | Capture d'écran depuis n'importe quel point (téléportation, cap, éclairage de contrôle, vue de dessus) |
+| `--aitest N` | La Veilleuse entend un bruit fort, passe en chasse, et la **longueur de son chemin** décroît jusqu'au contact |
+| `--rungame` | Les 4 fusibles sont atteignables, le tableau accepte la pose, le monte-charge déclenche la victoire, les portes répondent au rayon du joueur, les cachettes fonctionnent |
+| `tools/verify/render_assets.py` | Planches contact Cycles des modèles |
+| `tools/verify/spectro.py` | Spectrogrammes du sound design |
+
+Trois défauts de conception ont été trouvés par ces tests, pas à l'œil :
+le mobilier aléatoire pouvait **murer une pièce** ; les fusibles
+apparaissaient **dans les meubles** ; les portes étaient **injouables**
+(volume d'interaction mal parenté).

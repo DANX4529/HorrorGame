@@ -43,7 +43,7 @@ void fragment() {
 	float d = desat + (1.0 - souffle) * 0.40 + peur * 0.12;
 	col = mix(col, vec3(lum), clamp(d, 0.0, 0.95));
 	// virage froid dans les ombres, chaud dans les hautes lumières
-	col *= mix(vec3(0.88, 0.94, 1.06), vec3(1.06, 1.00, 0.92), smoothstep(0.0, 0.55, lum));
+	col *= mix(vec3(0.90, 0.95, 1.05), vec3(1.02, 1.00, 0.95), smoothstep(0.0, 0.55, lum));
 
 	// --- contraste « bain d'argent » ---
 	col = clamp((col - 0.5) * 1.16 + 0.5, 0.0, 4.0);

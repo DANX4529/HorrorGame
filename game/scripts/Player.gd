@@ -12,6 +12,7 @@ const ACCEL := 12.0
 const FREIN := 14.0
 const HAUTEUR_OEIL := 1.66
 const HAUTEUR_OEIL_ACCROUPI := 0.98
+const HAUTEUR_OEIL_CACHE := 1.34
 const SENSIBILITE := 0.0022
 const PORTEE_INTERACTION := 2.6
 
@@ -43,6 +44,7 @@ var _heart_player: AudioStreamPlayer
 var _breath_stream_name := ""
 var _cam_base := Vector3.ZERO
 var _look_target: Node3D = null     ## utilisé pendant la mort
+var _hide_yaw := 0.0                ## cap du casier : on ne peut pas se retourner dedans
 
 
 func _ready() -> void:
@@ -85,8 +87,8 @@ func _build() -> void:
 	# Torche : un cône serré avec un halo large, pour que le faisceau
 	# découpe l'obscurité sans jamais éclairer confortablement la pièce.
 	torch = SpotLight3D.new()
-	torch.light_color = Color(1.0, 0.93, 0.80)
-	torch.light_energy = 2.1
+	torch.light_color = Color(0.97, 0.96, 0.91)
+	torch.light_energy = 1.85
 	torch.spot_range = 21.0
 	torch.spot_angle = 30.0
 	torch.spot_angle_attenuation = 1.5
@@ -98,7 +100,7 @@ func _build() -> void:
 	cam.add_child(torch)
 
 	var halo := OmniLight3D.new()          # petite fuite de lumière autour du porteur
-	halo.light_color = Color(1.0, 0.92, 0.78)
+	halo.light_color = Color(0.96, 0.95, 0.90)
 	halo.light_energy = 0.45
 	halo.omni_range = 4.0
 	halo.shadow_enabled = false
@@ -119,6 +121,12 @@ func _unhandled_input(e: InputEvent) -> void:
 	if e is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		_yaw -= e.relative.x * SENSIBILITE
 		_pitch = clampf(_pitch - e.relative.y * SENSIBILITE, -1.45, 1.45)
+		if is_hidden:
+			# dans un casier on ne tourne pas la tête à 360° : le champ est
+			# celui des ouïes d'aération.
+			var d := wrapf(_yaw - _hide_yaw, -PI, PI)
+			_yaw = _hide_yaw + clampf(d, -0.72, 0.72)
+			_pitch = clampf(_pitch, -0.55, 0.55)
 
 
 func _physics_process(delta: float) -> void:
@@ -135,6 +143,7 @@ func _physics_process(delta: float) -> void:
 	if is_hidden:
 		_sprinting = false
 		velocity = Vector3.ZERO
+		rotation.y = _yaw
 		_update_breath(delta)
 		_apply_camera(delta, 0.0)
 		return
@@ -319,7 +328,7 @@ func _update_torch(delta: float) -> void:
 			flick = 1.0 - (1.0 - f) * 0.45 * (0.5 + 0.5 * sin(Time.get_ticks_msec() * 0.021))
 			if f < 0.25 and randf() < 0.02:
 				flick *= 0.25
-		torch.light_energy = 2.1 * flick
+		torch.light_energy = 1.85 * flick
 		if battery <= 0.0:
 			torch_on = false
 			torch.visible = false
@@ -367,6 +376,10 @@ func enter_hiding(spot: Node3D) -> void:
 		global_position = spot.global_position_hidden()
 	else:
 		global_position = spot.global_position
+	if spot.has_method("look_yaw"):
+		_hide_yaw = spot.look_yaw()
+		_yaw = _hide_yaw
+		rotation.y = _yaw
 	hide_changed.emit(true)
 
 
@@ -385,8 +398,12 @@ func exit_hiding() -> void:
 
 # --------------------------------------------------------------------------
 func _apply_camera(delta: float, speed: float) -> void:
-	head.position.y = lerpf(head.position.y,
-			HAUTEUR_OEIL_ACCROUPI if crouched else HAUTEUR_OEIL, delta * 9.0)
+	var eye := HAUTEUR_OEIL
+	if is_hidden:
+		eye = HAUTEUR_OEIL_CACHE
+	elif crouched:
+		eye = HAUTEUR_OEIL_ACCROUPI
+	head.position.y = lerpf(head.position.y, eye, delta * 9.0)
 
 	_bob = move_toward(_bob, 0.0, delta * 3.2)
 	_shake = move_toward(_shake, 0.0, delta * 1.1)

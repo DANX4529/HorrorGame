@@ -283,6 +283,8 @@ func _build_doors() -> void:
 		var ctrl := preload("res://scripts/Door.gd").new()
 		holder.add_child(ctrl)
 		ctrl.setup(d.pos, d.rot, d.beton, scn)
+		if _rng.randf() < 0.45:
+			ctrl.set_ajar()
 
 
 # ==========================================================================

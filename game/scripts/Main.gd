@@ -30,6 +30,7 @@ var dbg_ent := Vector3.INF
 var dbg_aitest := 0.0
 var dbg_alert := false
 var dbg_rungame := false
+var dbg_hide := false
 
 
 func _ready() -> void:
@@ -68,6 +69,8 @@ func _parse_cmdline() -> void:
 			dbg_alert = true
 		elif args[i] == "--rungame":
 			dbg_rungame = true
+		elif args[i] == "--hide":
+			dbg_hide = true
 
 
 func _build_world() -> void:
@@ -101,7 +104,7 @@ func _build_world() -> void:
 	_music.play()
 
 	GameState.reset_run()
-	GameState.set_phase(GameState.Phase.TITRE)
+	GameState.set_phase(GameState.Phase.TITRE, true)
 
 	_apply_debug()
 	if dbg_aitest > 0.0:
@@ -124,6 +127,8 @@ func _run_ai_test() -> void:
 	var d_min := d0
 	var seen := {}
 	var moved := 0.0
+	var path_max := 0
+	var path_min := 99999
 	var prev := veilleuse.global_position
 	var noise_done := false
 	print("AITEST start  d0=%.1f m  points_ronde=%d  cases_bloquees=%d  atteignable=%d/%d  props_ecartes=%d"
@@ -136,6 +141,9 @@ func _run_ai_test() -> void:
 		prev = veilleuse.global_position
 		var d := veilleuse.global_position.distance_to(player.global_position)
 		d_min = minf(d_min, d)
+		if veilleuse.etat == Veilleuse.Etat.CHASSE:
+			path_max = maxi(path_max, veilleuse._path.size())
+			path_min = mini(path_min, veilleuse._path.size())
 		seen[veilleuse.etat] = true
 		if not noise_done and t > 7.0:
 			noise_done = true
@@ -147,9 +155,13 @@ func _run_ai_test() -> void:
 					% [t, ETAT[veilleuse.etat], d, veilleuse._path.size(), moved])
 	print("AITEST RESULTAT  d_initiale=%.1f  d_min=%.1f  distance_parcourue=%.1f  etats=%s"
 			% [d0, d_min, moved, str(seen.keys().map(func(k): return ETAT[k]))])
-	print("AITEST  pathfinding=%s  reaction_au_bruit=%s"
+	print("AITEST  chemin en chasse : %d -> %d points (%.1f m -> %.1f m)"
+			% [path_max, path_min, path_max * level.NAV_RES, path_min * level.NAV_RES])
+	var chase := seen.has(Veilleuse.Etat.CHASSE) or seen.has(Veilleuse.Etat.ATTAQUE)
+	print("AITEST  deplacement=%s  reaction_au_bruit=%s  progression_vers_joueur=%s"
 			% ["OK" if moved > 3.0 else "ECHEC",
-			   "OK" if (seen.has(Veilleuse.Etat.CHASSE) or seen.has(Veilleuse.Etat.ATTAQUE)) else "ECHEC"])
+			   "OK" if chase else "ECHEC",
+			   "OK" if (path_max > 0 and path_min < path_max * 0.5) else "ECHEC"])
 	get_tree().quit()
 
 
@@ -164,6 +176,17 @@ func _apply_debug() -> void:
 		player.set_look(dbg_yaw, dbg_pitch)
 	if dbg_ent != Vector3.INF and veilleuse:
 		veilleuse.global_position = dbg_ent
+	if dbg_hide:
+		var spots := get_tree().get_nodes_in_group("hiding")
+		if not spots.is_empty():
+			var best_spot = spots[0]
+			var bd := 1e9
+			for sp in spots:
+				var d: float = sp.exit_position().distance_to(player.global_position)
+				if d < bd:
+					bd = d
+					best_spot = sp
+			best_spot.interact(player)
 	if dbg_alert and veilleuse:
 		veilleuse._spawn_grace = 0.0
 		veilleuse._target = player.global_position
@@ -312,30 +335,31 @@ func _run_objective_test() -> void:
 		if GameState.phase != GameState.Phase.VICTOIRE:
 			ok = false
 
-	# --- portes : le rayon du joueur doit bien remonter jusqu'à interact() ---
+	# --- portes : ouverture réelle ET accessibilité au rayon du joueur ---
 	var doors := get_tree().get_nodes_in_group("door")
 	print("RUNGAME  portes : %d" % doors.size())
 	if doors.is_empty():
 		ok = false
 	else:
 		var d0 = doors[0]
-		var before: bool = d0.open
-		d0.interact(player)
-		await get_tree().create_timer(1.2).timeout
-		print("RUNGAME  porte 0 : ouverte %s -> %s  angle=%.2f"
-				% [before, d0.open, d0._angle])
-		if d0.open == before or absf(d0._angle) < 1.0:
-			ok = false
-		# le rayon du joueur doit atteindre la porte REFERMÉE, vue de face
-		d0.interact(player)
-		await get_tree().create_timer(1.2).timeout
+		# certaines portes sont trouvées entrouvertes : on part d'un état connu
+		if d0.open:
+			d0.interact(player)
+			await get_tree().create_timer(1.2).timeout
+		# 1. le rayon du joueur doit atteindre la porte fermée, vue de face
 		player.global_position = d0.global_position + Vector3(0.55, 0, 1.3).rotated(Vector3.UP, d0.rotation.y)
 		player.set_look(d0.rotation.y, 0.0)
 		await get_tree().physics_frame
 		await get_tree().physics_frame
 		var tgt = player.current_target()
-		print("RUNGAME  cible visee par le joueur : %s" % (tgt.get_class() + "/" + str(tgt.get_script().resource_path.get_file()) if tgt else "AUCUNE"))
-		if tgt == null:
+		print("RUNGAME  cible visee : %s" % (tgt.get_script().resource_path.get_file() if tgt else "AUCUNE"))
+		if tgt == null or not tgt.has_method("prompt"):
+			ok = false
+		# 2. l'ouverture fait bien pivoter le vantail
+		d0.interact(player)
+		await get_tree().create_timer(1.2).timeout
+		print("RUNGAME  porte 0 : ouverte=%s  angle=%.2f rad" % [d0.open, d0._angle])
+		if not d0.open or d0._angle < 1.0:
 			ok = false
 
 	# --- cachettes ---

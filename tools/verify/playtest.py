@@ -14,7 +14,7 @@ GODOT = os.path.join(SCRATCH, "Godot_v4.3-stable_linux.x86_64")
 SHOTS = os.path.join(SCRATCH, "shots")
 
 
-def run(name, extra=(), frames=90, res="1280x720", timeout=240):
+def run(name, extra=(), frames=90, res="1280x720", timeout=240, autoplay=True):
     os.makedirs(SHOTS, exist_ok=True)
     out = os.path.join(SHOTS, name + ".png")
     if os.path.exists(out):
@@ -22,7 +22,7 @@ def run(name, extra=(), frames=90, res="1280x720", timeout=240):
     cmd = ["xvfb-run", "-a", "-s", f"-screen 0 {res}x24", GODOT,
            "--path", os.path.join(ROOT, "game"),
            "--rendering-driver", "opengl3", "--resolution", res,
-           "--", "--shot", out, str(frames), "--autoplay"] + list(extra)
+           "--", "--shot", out, str(frames)] + (["--autoplay"] if autoplay else []) + list(extra)
     p = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
     log = p.stdout + p.stderr
     bad = [l for l in log.splitlines()
@@ -43,11 +43,16 @@ if __name__ == "__main__":
             extra += ["--tp", a[i + 1], a[i + 2]]; i += 3
         elif a[i] in ("--yaw", "--pitch", "--light", "--torch", "--overview"):
             extra += [a[i], a[i + 1]]; i += 2
-        elif a[i] == "--noent":
-            extra += ["--noent"]; i += 1
+        elif a[i] == "--title":
+            i += 1                      # traité plus bas (désactive --autoplay)
+        elif a[i].startswith("--"):
+            # tout autre drapeau est transmis tel quel au jeu : sans ça, une
+            # option inconnue serait silencieusement avalée et le test
+            # mesurerait autre chose que ce qu'on croit.
+            extra += [a[i]]; i += 1
         else:
             i += 1
-    out, bad, log = run(name, extra, frames)
+    out, bad, log = run(name, extra, frames, autoplay=("--title" not in a))
     for l in bad[:20]:
         print("  !", l)
     print(("OK   " if os.path.exists(out) else "ECHEC ") + out)

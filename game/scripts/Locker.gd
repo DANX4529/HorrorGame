@@ -37,7 +37,7 @@ func setup(b: Node3D, door_scene: PackedScene, pos: Vector3, rot: float) -> void
 	var bx := BoxShape3D.new()
 	bx.size = Vector3(0.60, 1.90, 0.95)
 	cs.shape = bx
-	cs.position = Vector3(0, 0.95, -0.25)
+	cs.position = Vector3(0, 0.95, 0.25)
 	area.add_child(cs)
 	pivot.add_child(area)
 
@@ -69,14 +69,22 @@ func prompt() -> String:
 	return "Se cacher"
 
 
-## Position de la caméra une fois caché : juste derrière la porte, à hauteur
-## des ouïes d'aération.
+## Position du joueur une fois caché : au ras des ouïes d'aération, côté
+## pièce. Plus en arrière, la caméra se retrouve dans l'épaisseur du battant
+## et le joueur ne voit plus rien du tout.
 func global_position_hidden() -> Vector3:
-	return _base_pos + Vector3(0, 0, -0.16).rotated(Vector3.UP, facing)
+	return _base_pos + Vector3(0, 0, 0.30).rotated(Vector3.UP, facing)
+
+
+## Cap imposé au joueur caché : il regarde par les ouïes, vers la pièce.
+## L'avant du caisson est son +Z local ; l'avant d'un Node3D est son -Z :
+## d'où le demi-tour.
+func look_yaw() -> float:
+	return facing + PI
 
 
 func exit_position() -> Vector3:
-	return _base_pos + Vector3(0, 0, -0.85).rotated(Vector3.UP, facing)
+	return _base_pos + Vector3(0, 0, 0.85).rotated(Vector3.UP, facing)
 
 
 func _process(delta: float) -> void:

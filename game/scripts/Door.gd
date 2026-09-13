@@ -53,6 +53,16 @@ func setup(pos: Vector3, rot: float, is_metal: bool, leaf_scene: PackedScene) ->
 	add_to_group("door")
 
 
+## Porte trouvée entrouverte au démarrage (sans bruit ni animation).
+func set_ajar() -> void:
+	open = true
+	_angle = ANGLE_OUVERT
+	_target = ANGLE_OUVERT
+	_leaf.rotation.y = _angle
+	_body.rotation.y = _angle
+	_area.rotation.y = _angle
+
+
 func interact(_who) -> void:
 	open = not open
 	_target = ANGLE_OUVERT if open else 0.0

@@ -50,8 +50,8 @@ func _process(delta: float) -> void:
 		time_survived += delta
 
 
-func set_phase(p: Phase) -> void:
-	if phase == p:
+func set_phase(p: Phase, force := false) -> void:
+	if phase == p and not force:
 		return
 	phase = p
 	get_tree().paused = (p == Phase.PAUSE)

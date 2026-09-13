@@ -33,6 +33,9 @@ func _ready() -> void:
 	GameState.message.connect(_on_message)
 	GameState.phase_changed.connect(_on_phase)
 	GameState.fuses_changed.connect(func(_a, _b): _refresh_objective())
+	# On se cale sur l'état courant plutôt que d'attendre un signal : au
+	# démarrage la phase est déjà TITRE, donc aucun changement n'est émis.
+	_on_phase(GameState.phase)
 
 
 func bind(p: Player) -> void:
