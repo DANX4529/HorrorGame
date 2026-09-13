@@ -1,0 +1,51 @@
+; RESPIRE — Sanatorium du Mont-Cendre
+; Moteur : Godot 4.3, rendu GL Compatibility (fonctionne sans Vulkan).
+
+config_version=5
+
+[application]
+
+config/name="RESPIRE"
+config/description="Jeu d'horreur psychologique. Elle chasse au son. Retenez votre souffle."
+run/main_scene="res://scenes/Main.tscn"
+config/features=PackedStringArray("4.3", "GL Compatibility")
+boot_splash/bg_color=Color(0, 0, 0, 1)
+boot_splash/show_image=false
+config/icon="res://icon.svg"
+
+[autoload]
+
+GameState="*res://scripts/GameState.gd"
+MaterialLib="*res://scripts/MaterialLib.gd"
+NoiseBus="*res://scripts/NoiseBus.gd"
+Audio="*res://scripts/AudioLib.gd"
+
+[display]
+
+window/size/viewport_width=1280
+window/size/viewport_height=720
+window/stretch/mode="canvas_items"
+window/vsync/vsync_mode=1
+
+[layer_names]
+
+3d_physics/layer_1="monde"
+3d_physics/layer_2="joueur"
+3d_physics/layer_3="entite"
+3d_physics/layer_4="interactif"
+3d_physics/layer_5="occulteur_vue"
+
+[physics]
+
+common/physics_ticks_per_second=60
+3d/default_gravity=9.8
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0, 0, 0, 1)
+environment/defaults/default_environment="res://scenes/env.tres"
+textures/default_filters/anisotropic_filtering_level=2
+anti_aliasing/quality/msaa_3d=1
+lights_and_shadows/positional_shadow/atlas_size=4096

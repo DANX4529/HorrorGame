@@ -1,0 +1,15 @@
+[gd_resource type="ORMMaterial3D" format=3]
+
+[ext_resource type="Texture2D" path="res://assets/textures/floor_lino_albedo.png" id="t0"]
+[ext_resource type="Texture2D" path="res://assets/textures/floor_lino_normal.png" id="t1"]
+[ext_resource type="Texture2D" path="res://assets/textures/floor_lino_orm.png" id="t2"]
+
+[resource]
+resource_name = "floor_lino"
+albedo_texture = ExtResource("t0")
+normal_enabled = true
+normal_texture = ExtResource("t1")
+normal_scale = 1.0
+orm_texture = ExtResource("t2")
+texture_filter = 4
+texture_repeat = true
