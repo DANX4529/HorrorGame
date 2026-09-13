@@ -2,7 +2,7 @@
 .godot/
 .import/
 export.cfg
-export_presets.cfg
+# export_presets.cfg est versionné : la chaîne de build en a besoin
 build/
 *.translation
 

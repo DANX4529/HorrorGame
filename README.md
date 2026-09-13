@@ -12,27 +12,46 @@ les scripts de ce dépôt**. Rien n'est téléchargé.
 
 ## Jouer
 
-1. Télécharger **Godot 4.3** (standard, pas .NET) : https://godotengine.org/download
-2. Cloner ce dépôt, puis :
+### Dans le navigateur — rien à installer
+
+**https://danx4529.github.io/HorrorGame/**
+
+Premier chargement ~80 Mo (une à deux minutes), ensuite tout est en cache.
+Au casque, dans le noir.
+
+### Build Windows — un seul fichier
+
+Télécharger `RESPIRE-windows.exe` depuis la page ci-dessus ou depuis les
+builds du dépôt, puis double-cliquer. Pas de Godot, pas d'installation.
+Windows SmartScreen prévient que l'exécutable n'est pas signé :
+*Informations complémentaires* → *Exécuter quand même*.
+
+### Depuis les sources
+
+Il faut **Godot 4.3** (standard, pas .NET) : https://godotengine.org/download
 
 ```bash
 git clone https://github.com/danx4529/horrorgame.git
 cd horrorgame
-```
-
-3. Lancer le jeu :
-
-```bash
 godot --path game
 ```
 
-Ou : ouvrir Godot → **Importer** → sélectionner `game/project.godot` → **Jouer** (F5).
-
-> Le premier lancement importe ~250 fichiers (textures 1024², modèles, sons) :
-> comptez une à deux minutes. Les lancements suivants sont immédiats.
+Ou : ouvrir Godot → **Importer** → `game/project.godot` → **Jouer** (F5).
+Le premier lancement importe ~250 fichiers, comptez une à deux minutes.
 
 Le jeu utilise le renderer **GL Compatibility** : il tourne sans Vulkan, y
-compris sur machine modeste ou en VM.
+compris sur machine modeste, en VM ou dans un navigateur.
+
+### Produire les builds
+
+```bash
+export GODOT=/chemin/vers/godot
+./tools/godot/build_release.sh            # Windows + Web
+./tools/godot/build_release.sh deploy     # Web + publication sur gh-pages
+```
+
+Les modèles d'export Godot doivent être installés
+(`~/.local/share/godot/export_templates/4.3.stable`).
 
 ### Commandes
 
