@@ -30,12 +30,29 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	_build_post()
 	_build_ui()
+	# Aucun élément d'interface ne doit intercepter la souris : sinon il mange
+	# les mouvements destinés à la vue. Les Control sont en MOUSE_FILTER_STOP
+	# par défaut, y compris le réticule placé au centre exact de l'écran.
+	_ignore_mouse(self)
 	GameState.message.connect(_on_message)
 	GameState.phase_changed.connect(_on_phase)
 	GameState.fuses_changed.connect(func(_a, _b): _refresh_objective())
 	# On se cale sur l'état courant plutôt que d'attendre un signal : au
 	# démarrage la phase est déjà TITRE, donc aucun changement n'est émis.
 	_on_phase(GameState.phase)
+
+
+## Coupe le post-traitement (outil de vérification de la géométrie).
+func disable_post() -> void:
+	if _rect:
+		_rect.visible = false
+
+
+func _ignore_mouse(n: Node) -> void:
+	if n is Control:
+		n.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	for c in n.get_children():
+		_ignore_mouse(c)
 
 
 func bind(p: Player) -> void:

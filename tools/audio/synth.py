@@ -244,3 +244,104 @@ def write_wav(path, data, sr=SR):
                                       sr * ch * 2, ch * 2, 16))
         f.write(b"data" + struct.pack("<I", len(pcm)) + pcm)
     return path
+
+
+# ==========================================================================
+#  Impacts — la matière, pas la note
+# ==========================================================================
+def blur_env(e, sec=0.004):
+    """Lisse une enveloppe (adoucit les fronts des saccades de friction)."""
+    w = max(3, int(sec * SR) | 1)
+    k = np.hanning(w).astype(np.float32)
+    k /= k.sum()
+    return np.convolve(e, k, mode="same").astype(np.float32)
+
+
+def noise_burst(dur, freq, q=1.6, decay=0.05, seed=0, source="pink"):
+    """
+    Bruit passe-bande à décroissance exponentielle.
+
+    C'est le corps de tout impact réel : il donne le poids et une hauteur
+    perçue SANS donner de note. Un résonateur seul sur une impulsion produit
+    une sinusoïde amortie, c'est-à-dire un bip — la signature sonore des jeux
+    8 bits, et exactement ce qu'il faut éviter ici.
+    """
+    x = pink(dur, seed) if source == "pink" else white(dur, seed)
+    x = bandpass(x, float(freq), q)
+    t = np.arange(len(x), dtype=np.float32)
+    x *= np.exp(-t / max(decay * SR, 1.0))
+    m = np.abs(x).max()
+    return (x / m).astype(np.float32) if m > 1e-9 else x
+
+
+def thud(dur, cutoff, decay=0.03, seed=0, slope=1.0):
+    """
+    Choc large bande : bruit passe-bas à décroissance rapide.
+
+    Contrairement à un bruit à bande étroite (qui reste quasi périodique et
+    s'entend donc comme une note), un bruit passe-bas n'a AUCUNE hauteur : il
+    ne porte que le poids. C'est la base d'un impact crédible.
+    """
+    x = white(dur, seed)
+    x = lowpass(x, float(cutoff), 0.6)
+    for _ in range(int(max(slope, 1.0)) - 1):
+        x = lowpass(x, float(cutoff), 0.6)      # pente plus raide : -12 dB/oct de plus
+    t = np.arange(len(x), dtype=np.float32)
+    x *= np.exp(-t / max(decay * SR, 1.0))
+    m = np.abs(x).max()
+    return (x / m).astype(np.float32) if m > 1e-9 else x
+
+
+def modal_bank(exc, freqs, decays, gains):
+    """
+    Banc de résonateurs. À n'utiliser qu'en APPOINT d'un corps bruité, et avec
+    des fréquences INHARMONIQUES : des modes en rapports entiers se fondent en
+    une hauteur unique et le son redevient un bip.
+    """
+    out = np.zeros_like(exc)
+    for f, d, g in zip(freqs, decays, gains):
+        out += resonator(exc, float(f), float(d), float(g))
+    m = np.abs(out).max()
+    return (out / m).astype(np.float32) if m > 1e-9 else out
+
+
+# rapports inharmoniques (plaque/objet réel), volontairement non entiers
+INHARM = (1.0, 1.47, 2.09, 2.71, 3.43, 4.28, 5.36, 6.71)
+
+
+def material_modes(exc, base, decay, n=6, spread=1.0, seed=0, tilt=0.62):
+    """Modes d'un matériau : rapports inharmoniques, légèrement désaccordés."""
+    r = np.random.default_rng(seed)
+    freqs, decays, gains = [], [], []
+    for i in range(min(n, len(INHARM))):
+        freqs.append(base * INHARM[i] * spread * (0.97 + 0.06 * r.random()))
+        decays.append(decay * (tilt ** i) * (0.85 + 0.3 * r.random()))
+        gains.append(tilt ** i)
+    return modal_bank(exc, freqs, decays, gains)
+
+
+def crackle(dur, density=250, seed=0, f_lo=1200, f_hi=7000, decay=0.10):
+    """Crépitement : micro-impacts dispersés (gravier, plâtre, poussière)."""
+    n = int(dur * SR)
+    r = np.random.default_rng(seed)
+    x = np.zeros(n, np.float32)
+    k = int(density * dur)
+    if k > 0:
+        idx = r.integers(0, n, k)
+        x[idx] = r.standard_normal(k).astype(np.float32)
+    x = bandpass(x, (f_lo * f_hi) ** 0.5, 0.8)
+    t = np.arange(n, dtype=np.float32)
+    x *= np.exp(-t / max(decay * SR, 1.0))
+    m = np.abs(x).max()
+    return (x / m).astype(np.float32) if m > 1e-9 else x
+
+
+def transient(dur, bright=4000, seed=0, hardness=1.0):
+    """Attaque large bande : le contact lui-même, avant toute résonance."""
+    x = white(dur, seed)
+    x = lowpass(x, bright)
+    e = env_curve(dur, [(0.0, 1.0), (0.004 / max(dur, 1e-6), 0.32),
+                        (0.020 / max(dur, 1e-6), 0.07),
+                        (0.075 / max(dur, 1e-6), 0.0), (1.0, 0.0)])
+    x = x * fit(e, len(x))
+    return saturate(x * hardness, 1.2)

@@ -80,8 +80,11 @@ func _build() -> void:
 
 	cam = Camera3D.new()
 	cam.fov = 76.0
-	cam.near = 0.05
-	cam.far = 90.0
+	# Un plan proche à 0,05 m gaspille la moitié de la précision du tampon de
+	# profondeur ; à 0,12 m on double la résolution en profondeur sur tout le
+	# reste de la scène, ce qui supprime le scintillement des murs.
+	cam.near = 0.12
+	cam.far = 65.0
 	head.add_child(cam)
 
 	# Torche : un cône serré avec un halo large, pour que le faisceau
@@ -117,8 +120,16 @@ func _build() -> void:
 
 
 # ==========================================================================
-func _unhandled_input(e: InputEvent) -> void:
-	if e is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
+## On écoute dans _input et non _unhandled_input : un Control de l'interface
+## qui se trouve sous le curseur (le réticule est pile au centre de l'écran)
+## consommerait l'évènement avant qu'il n'arrive jusqu'ici.
+## Et on se fie à la phase de jeu plutôt qu'à Input.mouse_mode : sur certaines
+## configurations la capture du curseur échoue en silence, ce qui bloquait
+## totalement la vue.
+func _input(e: InputEvent) -> void:
+	if GameState.phase != GameState.Phase.JEU:
+		return
+	if e is InputEventMouseMotion:
 		_yaw -= e.relative.x * SENSIBILITE
 		_pitch = clampf(_pitch - e.relative.y * SENSIBILITE, -1.45, 1.45)
 		if is_hidden:

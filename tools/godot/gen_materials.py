@@ -37,7 +37,7 @@ def write(name, o):
               'normal_texture = ExtResource("t1")',
               "normal_scale = 1.0",
               'orm_texture = ExtResource("t2")',
-              "texture_filter = 4",
+              "texture_filter = 5",   # LINEAR_WITH_MIPMAPS_ANISOTROPIC
               "texture_repeat = true"]
     if o.get("ds"):
         lines.append("cull_mode = 2")

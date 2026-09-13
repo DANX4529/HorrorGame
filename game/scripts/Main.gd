@@ -31,6 +31,8 @@ var dbg_aitest := 0.0
 var dbg_alert := false
 var dbg_rungame := false
 var dbg_hide := false
+var dbg_mousetest := false
+var dbg_nopost := false
 
 
 func _ready() -> void:
@@ -71,6 +73,10 @@ func _parse_cmdline() -> void:
 			dbg_rungame = true
 		elif args[i] == "--hide":
 			dbg_hide = true
+		elif args[i] == "--mousetest":
+			dbg_mousetest = true
+		elif args[i] == "--nopost":
+			dbg_nopost = true
 
 
 func _build_world() -> void:
@@ -111,6 +117,8 @@ func _build_world() -> void:
 		_run_ai_test()
 	if dbg_rungame:
 		_run_objective_test()
+	if dbg_mousetest:
+		_run_mouse_test()
 	if shot_frames >= 0:
 		_do_shot()
 
@@ -168,12 +176,19 @@ func _run_ai_test() -> void:
 func _apply_debug() -> void:
 	if dbg_light > 0.0:
 		var e: Environment = (get_child(0) as WorldEnvironment).environment
+		# la couleur d'ambiance du jeu est presque noire : pour inspecter la
+		# géométrie il faut aussi l'éclaircir, pas seulement monter l'énergie
+		e.ambient_light_color = Color(0.62, 0.64, 0.66)
 		e.ambient_light_energy = dbg_light
-		e.fog_density = 0.012
+		e.fog_density = 0.012 / maxf(dbg_light, 1.0)
 	if dbg_tp != Vector3.INF:
 		player.global_position = dbg_tp + Vector3(0, 0.1, 0)
 	if dbg_yaw != INF:
 		player.set_look(dbg_yaw, dbg_pitch)
+	if dbg_nopost:
+		# inspection de la géométrie : sans grain ni vignettage, le
+		# scintillement du tampon de profondeur devient évident.
+		hud.disable_post()
 	if dbg_ent != Vector3.INF and veilleuse:
 		veilleuse.global_position = dbg_ent
 	if dbg_hide:
@@ -259,6 +274,11 @@ func _process(delta: float) -> void:
 
 	if GameState.phase != GameState.Phase.JEU:
 		return
+
+	# La capture du curseur peut être perdue (clic hors fenêtre, alt-tab) ou
+	# avoir échoué au démarrage : on la rétablit tant qu'on est en jeu.
+	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 
 	# le sol change de matériau entre les ailes
 	if player:
@@ -381,6 +401,30 @@ func _run_objective_test() -> void:
 			ok = false
 
 	print("RUNGAME RESULTAT : %s" % ("OK" if ok else "ECHEC"))
+	get_tree().quit()
+
+
+## Vérifie que la souris pilote bien la vue : on injecte un mouvement dans le
+## pipeline d'entrées normal et on regarde si le cap du joueur bouge.
+func _run_mouse_test() -> void:
+	GameState.set_phase(GameState.Phase.JEU)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	print("MOUSETEST  mouse_mode=%d (CAPTURED=%d)" % [Input.mouse_mode, Input.MOUSE_MODE_CAPTURED])
+	var y0: float = player._yaw
+	var p0: float = player._pitch
+	for i in 5:
+		var ev := InputEventMouseMotion.new()
+		ev.relative = Vector2(60, 30)
+		ev.screen_relative = Vector2(60, 30)
+		ev.position = get_viewport().get_visible_rect().size * 0.5
+		ev.global_position = ev.position
+		Input.parse_input_event(ev)
+		await get_tree().process_frame
+	print("MOUSETEST  yaw %.4f -> %.4f (delta %.4f)   pitch %.4f -> %.4f (delta %.4f)"
+			% [y0, player._yaw, player._yaw - y0, p0, player._pitch, player._pitch - p0])
+	print("MOUSETEST RESULTAT : %s"
+			% ("OK" if absf(player._yaw - y0) > 0.01 and absf(player._pitch - p0) > 0.01 else "ECHEC"))
 	get_tree().quit()
 
 

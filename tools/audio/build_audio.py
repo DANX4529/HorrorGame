@@ -104,10 +104,17 @@ def gasp():
 #  Rythme cardiaque
 # ==========================================================================
 def _thump(f0, dur, punch):
-    f = S.env_curve(dur, [(0, f0 * 2.3), (0.10, f0), (1, f0 * 0.72)])
-    x = S.sine(dur, f) * S.env_curve(dur, [(0, 0), (0.012, 1), (0.35, 0.42), (1, 0)])
-    x += S.lowpass(S.white(dur, 55) * 0.20, 180) * S.env_curve(dur, [(0, 1), (0.15, 0.1), (1, 0)])
-    return S.saturate(x * punch, 1.6)
+    """Un battement : muscle et sang, pas une sinusoïde nue."""
+    n = int(dur * SR)
+    f = S.env_curve(dur, [(0, f0 * 2.4), (0.09, f0), (1, f0 * 0.68)])
+    tone = S.sine(dur, f) * S.env_curve(dur, [(0, 0), (0.010, 1), (0.32, 0.38), (1, 0)])
+    body = S.thud(dur, f0 * 1.9, 0.050, int(f0 * 7) % 9999, slope=2.0)
+    body += S.thud(dur, f0 * 1.05, 0.090, int(f0 * 13) % 9999, slope=2.0) * 0.9
+    body += S.noise_burst(dur, f0 * 1.1, 0.7, 0.045, int(f0 * 17) % 9999) * 0.30
+    slap = S.lowpass(S.lowpass(S.white(dur, int(f0 * 3) % 9999), 170), 170)
+    slap *= S.env_curve(dur, [(0, 1), (0.05, 0.25), (0.25, 0.03), (1, 0)])
+    x = S.fit(tone, n) * 0.34 + S.fit(body, n) * 1.00 + S.fit(slap, n) * 0.42
+    return S.saturate(x * punch, 1.5)
 
 
 def heartbeat(bpm, punch=1.0, seed=0):
@@ -120,6 +127,9 @@ def heartbeat(bpm, punch=1.0, seed=0):
     off = int(0.175 * period * SR)
     x[off:off + len(dub)] += S.fit(dub, len(x[off:off + len(dub)]))
     x = S.reverb(x, 0.28, 0.12, 9)[:n]
+    # un battement perçu à travers la cage thoracique est très sourd : la
+    # queue de réverbération le rendait trop clair.
+    x = S.lowpass(S.lowpass(x, 190, 0.7), 260, 0.7)
     return S.normalize(S.loopable(x, 0.04), 0.80)
 
 
@@ -127,32 +137,53 @@ def heartbeat(bpm, punch=1.0, seed=0):
 #  Pas
 # ==========================================================================
 def step(kind, seed):
-    """Un pas = transient large bande + corps résonant + traînée de gravier."""
-    dur = 0.34
+    """
+    Un pas.
+
+    Structure d'un impact réel : attaque large bande, puis un CORPS BRUITÉ
+    (bruit filtré amorti) qui porte le poids, puis seulement quelques modes
+    inharmoniques de matériau en appoint, et enfin le frottement de semelle.
+    Un résonateur seul donnerait une sinusoïde amortie — le bip des jeux 8 bits.
+    """
+    dur = 0.42
     n = int(dur * SR)
     r = np.random.default_rng(seed)
-    if kind == "lino":
-        body_f, body_d, bright, grit = 190 + r.random() * 60, 0.030, 2600, 0.16
-    elif kind == "concrete":
-        body_f, body_d, bright, grit = 130 + r.random() * 45, 0.022, 4200, 0.42
-    else:  # entité : pas lourd, traînant, humide
-        body_f, body_d, bright, grit = 68 + r.random() * 22, 0.075, 1500, 0.55
-    imp = S.white(dur, seed) * S.env_curve(dur, [(0, 1), (0.010, 0.30), (0.09, 0.04), (1, 0)])
-    x = S.resonator(imp, body_f, body_d, 1.0)
-    x += S.resonator(imp, body_f * 2.7, body_d * 0.5, 0.34)
-    x += S.resonator(imp, body_f * 5.1, body_d * 0.25, 0.14)
-    # l'attaque garde un peu de tranchant, sans dominer le corps
-    x += S.lowpass(S.highpass(imp, 900), bright) * 0.16
-    # frottement de la semelle
-    drag = S.bandpass(S.pink(dur, seed + 100), 1500, 1.0)
-    drag *= S.env_curve(dur, [(0, 0.0), (0.05, grit * 0.45), (0.45, grit * 0.16), (1, 0)])
-    x = S.fit(x, n) + S.fit(drag, n)
+
+    if kind == "lino":          # semelle sur linoléum : mat, feutré
+        f0, dec, bright, grit, modal, drag_f = 215, 0.030, 1900, 0.30, 0.08, 1700
+    elif kind == "concrete":    # béton nu : plus sec, plus de grain
+        f0, dec, bright, grit, modal, drag_f = 148, 0.026, 3400, 0.58, 0.07, 2200
+    else:                       # la Veilleuse : lourd, humide, traînant
+        f0, dec, bright, grit, modal, drag_f = 88, 0.060, 1300, 0.50, 0.05, 820
+
+    f0 *= 0.88 + 0.24 * r.random()
+
+    tr = S.transient(dur, bright, seed, 1.0)                       # le contact
+
+    # Le poids vient d'un choc PASSE-BAS, sans hauteur. Les bandes passantes
+    # étroites que j'utilisais d'abord restaient périodiques : elles
+    # s'entendaient comme une note, d'où l'impression de percussion 8 bits.
+    body = S.thud(dur, f0 * 2.6, dec, seed + 11, slope=2.0)
+    body += S.thud(dur, f0 * 1.15, dec * 1.7, seed + 12, slope=2.0) * 0.90
+    body += S.noise_burst(dur, f0 * 1.1, 0.6, dec * 0.8, seed + 13) * 0.35
+
+    modes = S.material_modes(tr, f0 * 1.15, dec * 0.45, n=5, seed=seed + 21, tilt=0.42)
+    grains = S.crackle(dur, 260 + 620 * grit, seed + 31, 1200, 9000, 0.070) * grit
+
+    drag = S.bandpass(S.pink(dur, seed + 41), drag_f, 0.9)
+    drag *= S.env_curve(dur, [(0, 0.0), (0.05, 0.55), (0.35, 0.18), (1, 0)])
+
+    x = (S.fit(tr, n) * 0.16 + S.fit(body, n) * 1.30
+         + S.fit(modes, n) * modal + S.fit(grains, n) * 0.22
+         + S.fit(drag, n) * 0.26)
+
     if kind == "entity":
-        # traînement : un second frottement décalé, plus grave
-        sl = S.bandpass(S.pink(dur, seed + 200), 620, 1.0)
-        sl *= S.env_curve(dur, [(0, 0), (0.35, 0.5), (1, 0)])
-        x += S.fit(sl, n) * 0.8
-    return S.normalize(S.reverb(x, 0.45, 0.26, seed), 0.80)
+        sl = S.bandpass(S.pink(dur, seed + 51), 520, 0.8)
+        sl *= S.env_curve(dur, [(0, 0), (0.28, 0.6), (0.75, 0.2), (1, 0)])
+        x += S.fit(sl, n) * 0.55
+        x = S.lowpass(x, 3200, 0.8)
+
+    return S.normalize(S.reverb(S.saturate(x, 1.25), 0.45, 0.24, seed), 0.80)
 
 
 # ==========================================================================
@@ -179,31 +210,42 @@ def amb_drone(dur=18.0):
 
 
 def creak(seed):
-    """Craquement de charpente : frottement bois/bois par saccades."""
-    dur = 1.5 + (seed % 3) * 0.5
+    """Craquement de charpente : friction bois sur bois, par saccades."""
+    dur = 1.6 + (seed % 3) * 0.5
     n = int(dur * SR)
     r = np.random.default_rng(seed)
-    x = np.zeros(n, np.float32)
-    f0 = 180 + r.random() * 260
-    # stick-slip : une série d'impulsions de plus en plus espacées
+    f0 = 220 + r.random() * 320
+    sweep = S.env_curve(dur, [(0, f0), (0.5, f0 * 1.5), (1, f0 * 1.2)])
+    fric = S.bandpass(S.pink(dur, seed), sweep, 2.0)
+    fric += S.bandpass(S.pink(dur, seed + 1), sweep * 2.2, 2.6) * 0.45
+    fric += S.highpass(S.pink(dur, seed + 2), 2200) * 0.12
+    mod = np.zeros(n, np.float32)
     t, i = 0.05, 0
-    while t < dur * 0.8:
-        p = int(t * SR)
-        g = S.resonator(S.white(0.14, seed + i) * 0.30, f0 * (1 + i * 0.045), 0.045, 1.0)
-        seg = x[p:p + len(g)]
-        x[p:p + len(seg)] += S.fit(g, len(seg)) * (0.9 - i * 0.05)
-        t += 0.035 + r.random() * 0.055 + i * 0.006
+    while t < dur * 0.82:
+        a = int(t * SR)
+        w = int((0.010 + r.random() * 0.026) * SR)
+        seg = mod[a:a + w]
+        if len(seg) > 1:
+            mod[a:a + len(seg)] = np.hanning(len(seg)).astype(np.float32) * (0.5 + 0.5 * r.random())
+        t += 0.030 + r.random() * 0.055 + i * 0.005
         i += 1
-    return S.normalize(S.reverb(x, 0.8, 0.38, seed + 5), 0.62)
+    mod = S.blur_env(mod, 0.005)
+    shape = S.env_curve(dur, [(0, 0.3), (0.25, 1.0), (1, 0)])
+    x = S.fit(fric, n) * S.fit(mod, n) * S.fit(shape, n)
+    x += S.fit(S.noise_burst(dur, 95, 1.5, 0.55, seed + 3), n) * 0.18
+    return S.normalize(S.reverb(x, 0.8, 0.36, seed + 5), 0.62)
 
 
 def drip(seed):
-    """Goutte d'eau dans une cave — résonance montante caractéristique."""
-    dur = 0.9
-    f = S.env_curve(0.10, [(0, 620), (1, 1450)])
-    x = S.fit(S.sine(0.10, f) * S.env_curve(0.10, [(0, 1), (1, 0)]), int(dur * SR))
-    x += S.fit(S.highpass(S.white(0.02, seed), 3000) * 0.3, int(dur * SR))
-    return S.normalize(S.reverb(x, 1.1, 0.55, seed), 0.55)
+    """Goutte : éclaboussure large bande, puis résonance de la flaque."""
+    dur = 1.0
+    n = int(dur * SR)
+    x = S.fit(S.transient(0.03, 12000, seed, 0.8), n) * 0.45
+    x += S.fit(S.noise_burst(0.08, 2600, 1.2, 0.012, seed + 1), n) * 0.55
+    f = S.env_curve(0.13, [(0, 700), (1, 1600)])
+    ring = S.sine(0.13, f) * S.env_curve(0.13, [(0, 0), (0.06, 1), (1, 0)])
+    x += S.fit(ring, n) * 0.60
+    return S.normalize(S.reverb(x, 1.1, 0.52, seed), 0.55)
 
 
 # ==========================================================================
@@ -211,107 +253,142 @@ def drip(seed):
 # ==========================================================================
 def door(kind, seed=80):
     if kind == "slam":
-        dur = 1.1
-        imp = S.white(dur, seed) * S.env_curve(dur, [(0, 1), (0.006, 0.2), (0.05, 0.02), (1, 0)])
-        x = S.resonator(imp, 78, 0.10, 1.0) * 1.6 + S.resonator(imp, 165, 0.05, 0.7)
-        x += S.lowpass(imp, 300) * 0.8
-        return S.normalize(S.reverb(x, 0.9, 0.42, seed), 0.95)
-    # grincement de gond : stick-slip lent, hauteur qui monte
-    dur = 1.8 if kind == "open" else 1.35
+        dur = 1.2
+        n = int(dur * SR)
+        tr = S.transient(dur, 6000, seed, 1.4)
+        body = S.thud(dur, 210, 0.12, seed + 1)
+        body += S.thud(dur, 95, 0.19, seed + 2) * 0.85
+        body += S.noise_burst(dur, 120, 0.7, 0.07, seed + 3) * 0.35
+        modes = S.material_modes(tr, 96, 0.055, n=5, seed=seed + 4, tilt=0.40)
+        rattle = S.crackle(dur, 90, seed + 4, 900, 4500, 0.22)
+        x = (S.fit(tr, n) * 0.40 + S.fit(body, n) * 1.0
+             + S.fit(modes, n) * 0.12 + S.fit(rattle, n) * 0.40)
+        return S.normalize(S.reverb(S.saturate(x, 1.4), 0.9, 0.40, seed), 0.95)
+
+    # --- grincement de gond : de la FRICTION, pas une glissade de notes ---
+    # Le stick-slip module l'amplitude d'un bruit filtré dont la bande monte.
+    # Une série de résonateurs produirait des sinusoïdes successives, ce qui
+    # sonne synthétique.
+    dur = 1.9 if kind == "open" else 1.45
     n = int(dur * SR)
     r = np.random.default_rng(seed)
-    x = np.zeros(n, np.float32)
-    t, i = 0.02, 0
-    while t < dur * 0.72:
-        p = int(t * SR)
-        f = 420 + i * 38 + r.random() * 60
-        g = S.resonator(S.white(0.18, seed + i) * 0.22, f, 0.055, 1.0)
-        g += S.resonator(S.white(0.18, seed + i + 50) * 0.10, f * 2.4, 0.03, 1.0)
-        seg = x[p:p + len(g)]
-        x[p:p + len(seg)] += S.fit(g, len(seg)) * (0.55 + 0.45 * math.sin(i * 0.7))
-        t += 0.030 + r.random() * 0.045
-        i += 1
-    # claquement final du pêne
+    sweep = S.env_curve(dur, [(0, 380), (0.45, 780), (0.8, 1250), (1, 1150)])
+    fric = S.bandpass(S.pink(dur, seed), sweep, 2.2)
+    fric += S.bandpass(S.pink(dur, seed + 1), sweep * 2.55, 2.8) * 0.50
+    fric += S.bandpass(S.pink(dur, seed + 2), sweep * 0.52, 1.6) * 0.35
+    fric += S.highpass(S.pink(dur, seed + 3), 2600) * 0.14
+    mod = np.zeros(n, np.float32)
+    t = 0.02
+    while t < dur * 0.80:
+        a = int(t * SR)
+        w = int((0.012 + r.random() * 0.020) * SR)
+        seg = mod[a:a + w]
+        if len(seg) > 1:
+            mod[a:a + len(seg)] = np.hanning(len(seg)).astype(np.float32) * (0.55 + 0.45 * r.random())
+        t += 0.028 + r.random() * 0.045
+    mod = S.blur_env(mod, 0.004)
+    shape = S.env_curve(dur, [(0, 0.5), (0.2, 1.0), (0.85, 0.5), (1, 0)])
+    x = S.fit(fric, n) * S.fit(mod, n) * S.fit(shape, n)
+    x += S.fit(S.noise_burst(dur, 140, 1.6, 0.5, seed + 7), n) * 0.16
+
     if kind == "close":
-        p = int(dur * 0.80 * SR)
-        cl = S.resonator(S.white(0.25, seed + 9) * 0.6, 210, 0.035, 1.0)
-        seg = x[p:p + len(cl)]
-        x[p:p + len(seg)] += S.fit(cl, len(seg)) * 1.2
-    return S.normalize(S.reverb(x, 0.8, 0.36, seed + 2), 0.78)
+        p = int(dur * 0.82 * SR)
+        tr = S.transient(0.35, 5000, seed + 9, 1.2)
+        clack = S.fit(tr, int(0.35 * SR)) * 0.5 + S.noise_burst(0.35, 190, 1.3, 0.06, seed + 10)
+        seg = x[p:p + len(clack)]
+        x[p:p + len(seg)] += S.fit(clack, len(seg)) * 1.1
+    return S.normalize(S.reverb(x, 0.8, 0.34, seed + 2), 0.78)
 
 
 def locker(kind, seed=90):
-    dur = 0.85
+    """Tôle mince : dense et inharmonique, portée par un corps bruité."""
+    dur = 0.95
     n = int(dur * SR)
-    imp = S.white(dur, seed) * S.env_curve(dur, [(0, 1), (0.005, 0.25), (0.06, 0.03), (1, 0)])
-    # tôle mince : plusieurs modes hauts et désaccordés
-    x = np.zeros(n, np.float32)
-    for f, d, g in ((310, 0.22, 1.0), (487, 0.18, 0.7), (763, 0.13, 0.5),
-                    (1180, 0.09, 0.35), (1890, 0.06, 0.22)):
-        x += S.fit(S.resonator(imp, f, d, g), n)
+    tr = S.transient(dur, 9000, seed, 1.1)
+    body = S.noise_burst(dur, 330, 1.2, 0.10, seed + 1)
+    body += S.noise_burst(dur, 1150, 0.9, 0.06, seed + 2) * 0.55
+    body += S.noise_burst(dur, 2600, 0.8, 0.035, seed + 3) * 0.32
+    modes = S.material_modes(tr, 305, 0.16, n=7, seed=seed + 4, tilt=0.68)
+    x = S.fit(tr, n) * 0.32 + S.fit(body, n) * 1.0 + S.fit(modes, n) * 0.38
     if kind == "open":
-        sq = S.bandpass(S.pink(0.5, seed + 3), S.env_curve(0.5, [(0, 700), (1, 1900)]), 6.0)
-        x += S.fit(sq * S.env_curve(0.5, [(0, 0), (0.3, 0.5), (1, 0)]), n) * 0.7
-    return S.normalize(S.reverb(x, 0.6, 0.34, seed), 0.80)
+        sq = S.bandpass(S.pink(0.55, seed + 5),
+                        S.env_curve(0.55, [(0, 760), (1, 2100)]), 8.0)
+        sq *= S.env_curve(0.55, [(0, 0), (0.3, 0.45), (1, 0)])
+        x += S.fit(sq, n) * 0.55
+    return S.normalize(S.reverb(S.saturate(x, 1.2), 0.6, 0.32, seed), 0.80)
 
 
 def pickup(kind, seed=100):
-    dur = 0.5
+    dur = 0.55
     n = int(dur * SR)
-    if kind == "fuse":      # porcelaine + laiton
-        fs = ((1650, 0.13, 1.0), (2480, 0.10, 0.6), (3720, 0.07, 0.35))
-    else:                   # pile : métal sourd
-        fs = ((720, 0.09, 1.0), (1130, 0.06, 0.5), (1960, 0.04, 0.25))
-    imp = S.white(dur, seed) * S.env_curve(dur, [(0, 1), (0.004, 0.2), (0.03, 0.02), (1, 0)])
-    x = np.zeros(n, np.float32)
-    for f, d, g in fs:
-        x += S.fit(S.resonator(imp, f, d, g), n)
-    # froissement du tissu de la poche
-    x += S.fit(S.bandpass(S.pink(dur, seed + 1), 3600, 1.0)
-               * S.env_curve(dur, [(0, 0), (0.25, 0.25), (1, 0)]), n)
-    return S.normalize(S.reverb(x, 0.4, 0.22, seed), 0.72)
+    tr = S.transient(dur, 11000, seed, 0.9)
+    if kind == "fuse":          # porcelaine et laiton : bref et clair
+        body = S.noise_burst(dur, 1750, 1.1, 0.055, seed + 1)
+        body += S.noise_burst(dur, 3600, 0.9, 0.030, seed + 2) * 0.5
+        modes = S.material_modes(tr, 1680, 0.075, n=4, seed=seed + 3, tilt=0.5)
+        mg = 0.34
+    else:                       # pile : métal sourd
+        body = S.noise_burst(dur, 700, 1.3, 0.045, seed + 1)
+        body += S.noise_burst(dur, 1500, 1.0, 0.025, seed + 2) * 0.4
+        modes = S.material_modes(tr, 690, 0.05, n=4, seed=seed + 3, tilt=0.45)
+        mg = 0.22
+    cloth = S.bandpass(S.pink(dur, seed + 4), 3800, 0.9)
+    cloth *= S.env_curve(dur, [(0, 0), (0.22, 0.30), (0.8, 0.08), (1, 0)])
+    x = S.fit(tr, n) * 0.30 + S.fit(body, n) * 1.0 + S.fit(modes, n) * mg + S.fit(cloth, n) * 0.40
+    return S.normalize(S.reverb(x, 0.4, 0.20, seed), 0.72)
 
 
 def click_flashlight():
-    dur = 0.18
+    """Interrupteur : deux claquements secs, large bande. Aucune note."""
+    dur = 0.22
     n = int(dur * SR)
-    imp = S.white(dur, 111) * S.env_curve(dur, [(0, 1), (0.0015, 0.1), (0.01, 0), (1, 0)])
-    x = S.fit(S.resonator(imp, 2300, 0.020, 1.0), n)
-    x += S.fit(S.resonator(imp, 4100, 0.012, 0.5), n)
-    return S.normalize(S.reverb(x, 0.25, 0.18, 11), 0.62)
+    x = np.zeros(n, np.float32)
+    for off, g, br in ((0.000, 1.0, 12000), (0.013, 0.45, 7000)):
+        c = S.transient(0.08, br, 111 + int(off * 1000), 1.0)
+        c = c + S.noise_burst(0.08, 2400, 1.0, 0.008, 112 + int(off * 1000)) * 0.6
+        a = int(off * SR)
+        seg = x[a:a + len(c)]
+        x[a:a + len(seg)] += S.fit(c, len(seg)) * g
+    x += S.fit(S.noise_burst(dur, 620, 1.4, 0.020, 113), n) * 0.35
+    return S.normalize(S.reverb(x, 0.25, 0.16, 11), 0.62)
 
 
 def fuse_insert():
-    dur = 0.9
+    """Frottement de la porcelaine dans les griffes, puis verrouillage."""
+    dur = 1.0
     n = int(dur * SR)
-    sc = S.bandpass(S.pink(0.35, 121), S.env_curve(0.35, [(0, 900), (1, 2600)]), 3.0)
-    sc *= S.env_curve(0.35, [(0, 0), (0.3, 0.6), (1, 0.1)])
+    sc = S.bandpass(S.pink(0.38, 121), S.env_curve(0.38, [(0, 1100), (1, 3000)]), 3.5)
+    sc *= S.env_curve(0.38, [(0, 0), (0.25, 0.55), (1, 0.08)])
     x = S.fit(sc, n)
-    p = int(0.36 * SR)
-    imp = S.white(0.4, 122) * S.env_curve(0.4, [(0, 1), (0.004, 0.2), (0.03, 0), (1, 0)])
-    lock = S.resonator(imp, 640, 0.09, 1.0) + S.resonator(imp, 1290, 0.05, 0.5)
+    x += S.fit(S.crackle(0.38, 220, 122, 2000, 9000, 0.30), n) * 0.25
+    p = int(0.40 * SR)
+    tr = S.transient(0.45, 7000, 123, 1.1)
+    lock = S.fit(tr, int(0.45 * SR)) * 0.45 + S.noise_burst(0.45, 640, 1.2, 0.045, 124)
+    lock += S.material_modes(tr, 620, 0.05, n=4, seed=125, tilt=0.45) * 0.28
     seg = x[p:p + len(lock)]
-    x[p:p + len(seg)] += S.fit(lock, len(seg)) * 1.2
-    return S.normalize(S.reverb(x, 0.5, 0.28, 12), 0.82)
+    x[p:p + len(seg)] += S.fit(lock, len(seg)) * 1.15
+    return S.normalize(S.reverb(x, 0.5, 0.26, 12), 0.82)
 
 
 def power_on():
-    """Le courant revient : claquement de contacteur puis ronflement 50 Hz."""
-    dur = 3.4
+    """Le courant revient : claquement de contacteur, puis ronflement 50 Hz."""
+    dur = 3.5
     n = int(dur * SR)
-    imp = S.white(dur, 131) * S.env_curve(dur, [(0, 1), (0.004, 0.25), (0.04, 0.02), (1, 0)])
-    x = S.fit(S.resonator(imp, 95, 0.16, 1.0) * 1.4, n)
-    hum = (S.sine(dur, 50) * 0.55 + S.sine(dur, 100) * 0.28 + S.sine(dur, 150) * 0.14)
+    tr = S.transient(dur, 8000, 131, 1.5)
+    x = S.fit(tr, n) * 0.5
+    x += S.fit(S.noise_burst(dur, 110, 1.3, 0.11, 132), n) * 1.0
+    x += S.fit(S.material_modes(tr, 132, 0.09, n=5, seed=133, tilt=0.5), n) * 0.25
+    hum = (S.sine(dur, 50) * 0.55 + S.sine(dur, 100) * 0.26 + S.sine(dur, 150) * 0.13
+           + S.sine(dur, 250) * 0.06)
     hum *= S.env_curve(dur, [(0, 0), (0.06, 0.0), (0.13, 0.9), (0.3, 0.6), (1, 0.5)])
-    # amorçage des tubes fluorescents
-    for at in (0.30, 0.44, 0.52, 0.78, 0.95, 1.35):
+    hum += S.bandpass(S.pink(dur, 134), 1200, 1.2) * 0.10       # souffle du ballast
+    for at in (0.30, 0.44, 0.52, 0.78, 0.95, 1.35):             # amorçage des tubes
         p = int(at * SR)
-        z = S.highpass(S.white(0.09, int(at * 1000)), 2200) * 0.55
-        z *= S.env_curve(0.09, [(0, 1), (1, 0)])
+        z = S.crackle(0.12, 700, int(at * 1000), 2500, 12000, 0.035) * 0.8
         seg = x[p:p + len(z)]
         x[p:p + len(seg)] += S.fit(z, len(seg))
     x += S.fit(hum, n) * 0.45
-    return S.normalize(S.reverb(x, 0.8, 0.30, 13), 0.85)
+    return S.normalize(S.reverb(S.saturate(x, 1.3), 0.8, 0.28, 13), 0.85)
 
 
 # ==========================================================================
@@ -354,31 +431,37 @@ def entity_scream():
 
 
 def jumpscare():
-    """Mort du joueur : cluster dissonant + impact."""
-    dur = 2.6
+    """Mort du joueur : impact massif puis cluster dissonant."""
+    dur = 2.8
     n = int(dur * SR)
     x = np.zeros(n, np.float32)
     for f in (58, 61.5, 87, 116, 123, 174, 233, 247):
-        x += S.fit(S.sine(dur, f), n) * (0.9 / 8)
-    x *= S.env_curve(dur, [(0, 1.0), (0.12, 0.85), (1, 0)])
-    imp = S.white(dur, 221) * S.env_curve(dur, [(0, 1), (0.008, 0.3), (0.06, 0.05), (1, 0)])
-    x += S.fit(S.resonator(imp, 62, 0.22, 1.0), n) * 1.6
-    x += S.fit(S.highpass(imp, 4000), n) * 0.5
-    x = S.saturate(x, 2.2)
-    return S.normalize(S.reverb(x, 1.0, 0.40, 23), 0.99)
+        x += S.fit(S.sine(dur, f), n) * (0.85 / 8)
+    x *= S.env_curve(dur, [(0, 1.0), (0.12, 0.8), (1, 0)])
+    tr = S.transient(dur, 12000, 221, 1.8)
+    x += S.fit(tr, n) * 0.55
+    x += S.fit(S.noise_burst(dur, 62, 1.3, 0.30, 222), n) * 1.25
+    x += S.fit(S.noise_burst(dur, 210, 1.0, 0.12, 223), n) * 0.55
+    x += S.fit(S.material_modes(tr, 74, 0.22, n=6, seed=224, tilt=0.6), n) * 0.30
+    x += S.fit(S.crackle(dur, 260, 225, 1500, 11000, 0.18), n) * 0.30
+    return S.normalize(S.reverb(S.saturate(x, 2.0), 1.0, 0.40, 23), 0.99)
 
 
 def stinger_detect():
-    """Sting court quand elle passe en investigation."""
-    dur = 1.6
+    """Sting d'investigation : dissonance courte, mais texturée."""
+    dur = 1.7
     n = int(dur * SR)
     x = np.zeros(n, np.float32)
-    for f, g in ((146.8, 1.0), (155.6, 0.85), (207.7, 0.5), (311.1, 0.3)):
-        x += S.fit(S.sine(dur, f), n) * g
-    x *= S.env_curve(dur, [(0, 0), (0.015, 1.0), (0.25, 0.45), (1, 0)])
-    x += S.fit(S.highpass(S.white(dur, 231), 5000)
-               * S.env_curve(dur, [(0, 0.5), (0.08, 0), (1, 0)]), n) * 0.4
-    return S.normalize(S.reverb(x, 0.9, 0.38, 29), 0.88)
+    for fq, g in ((146.8, 1.0), (155.6, 0.85), (207.7, 0.5), (311.1, 0.28)):
+        v = S.sine(dur, fq * (1.0 + 0.0022 * S.fit(S.lowpass(S.white(dur, int(fq)), 4), n)))
+        x += S.fit(v, n) * g
+    x *= S.env_curve(dur, [(0, 0), (0.015, 1.0), (0.25, 0.42), (1, 0)])
+    bow = S.bandpass(S.pink(dur, 232), 2100, 2.2)
+    bow *= S.env_curve(dur, [(0, 0), (0.04, 0.7), (0.4, 0.25), (1, 0)])
+    x += S.fit(bow, n) * 0.45
+    x += S.fit(S.noise_burst(dur, 90, 1.4, 0.22, 233), n) * 0.35
+    x += S.fit(S.transient(dur, 9000, 234, 0.8), n) * 0.22
+    return S.normalize(S.reverb(S.saturate(x, 1.2), 0.9, 0.36, 29), 0.88)
 
 
 def music_chase(dur=12.0):
@@ -408,14 +491,17 @@ def music_chase(dur=12.0):
 
 
 def ui_sound(kind):
-    dur = 0.25
+    """Interface : des claquements feutrés, jamais des notes."""
+    dur = 0.28
     n = int(dur * SR)
-    f = 320 if kind == "move" else 220
-    imp = S.white(dur, 251) * S.env_curve(dur, [(0, 1), (0.003, 0.15), (0.02, 0), (1, 0)])
-    x = S.fit(S.resonator(imp, f, 0.10, 1.0), n)
+    f = 480 if kind == "move" else 300
+    tr = S.transient(dur, 6000 if kind == "move" else 3500, 251, 0.7)
+    x = S.fit(tr, n) * 0.35
+    x += S.fit(S.thud(dur, f * 3.0, 0.030, 252), n) * 1.0
+    x += S.fit(S.noise_burst(dur, f * 1.6, 0.7, 0.016, 253), n) * 0.45
     if kind == "select":
-        x += S.fit(S.resonator(imp, f * 1.5, 0.14, 0.6), n)
-    return S.normalize(S.reverb(x, 0.35, 0.24, 33), 0.55)
+        x += S.fit(S.thud(dur, f * 1.4, 0.060, 254), n) * 0.60
+    return S.normalize(S.reverb(x, 0.35, 0.22, 33), 0.55)
 
 
 # ==========================================================================

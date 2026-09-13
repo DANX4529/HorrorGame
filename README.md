@@ -126,6 +126,12 @@ python3 tools/verify/render_assets.py "game/assets/models/props/*.glb" --out /tm
 
 # spectrogrammes du sound design
 python3 tools/verify/spectro.py game/assets/audio/*.wav /tmp/spec.png
+
+# « est-ce un bip ou de la matière ? » — périodicité de chaque son
+python3 tools/verify/tonality.py game/assets/audio/step_*.wav
+
+# inspection de la géométrie, sans post-traitement ni obscurité
+python3 tools/verify/playtest.py geo --tp 10 12 --yaw -90 --light 1.4 --nopost
 ```
 
 Deux tests d'intégration tournent dans le jeu lui-même :
