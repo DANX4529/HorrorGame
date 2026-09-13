@@ -1,0 +1,17 @@
+# Godot
+.godot/
+.import/
+export.cfg
+export_presets.cfg
+build/
+*.translation
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# Outils / temporaires
+/tmp/
+*.blend1
+_render/
