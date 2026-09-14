@@ -4,7 +4,7 @@ extends CanvasLayer
 ## Séparés du HUD, qui ne garde que l'affichage en cours de partie et le
 ## post-traitement. Tout est construit par code, comme le reste du projet.
 
-enum Ecran { AUCUN, TITRE, OPTIONS, PAUSE, MORT, VICTOIRE }
+enum Ecran { AUCUN, TITRE, OPTIONS, PAUSE, MORT, VICTOIRE, JOURNAL, DOSSIER }
 
 const OR := Color(0.87, 0.83, 0.74)
 const GRIS := Color(0.70, 0.72, 0.67)
@@ -15,6 +15,8 @@ var _boite: VBoxContainer
 var _ecran: Ecran = Ecran.AUCUN
 var _retour: Ecran = Ecran.TITRE
 var _joueur: Player
+var _defilement: ScrollContainer
+var _principal: Button      ## bouton qui reçoit le focus à l'ouverture de l'écran
 
 
 func _ready() -> void:
@@ -41,10 +43,19 @@ func _construire() -> void:
 	_voile.mouse_filter = Control.MOUSE_FILTER_STOP
 	racine.add_child(_voile)
 
+	# Le menu défile. Sans cela, le journal — qui s'allonge à chaque chapitre
+	# ajouté — poussait son bouton « Retour » hors de l'écran, et un écran
+	# devenait inatteignable au fur et à mesure qu'on enrichissait le récit.
+	_defilement = ScrollContainer.new()
+	_defilement.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_defilement.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	_defilement.follow_focus = true
+	racine.add_child(_defilement)
+
 	var centre := CenterContainer.new()
-	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
-	centre.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	racine.add_child(centre)
+	centre.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	centre.size_flags_vertical = Control.SIZE_EXPAND_FILL
+	_defilement.add_child(centre)
 
 	_boite = VBoxContainer.new()
 	_boite.add_theme_constant_override("separation", 10)
@@ -56,6 +67,7 @@ func _construire() -> void:
 #  Briques d'interface
 # ==========================================================================
 func _vider() -> void:
+	_principal = null
 	for c in _boite.get_children():
 		c.queue_free()
 
@@ -73,6 +85,16 @@ func _texte(t: String, taille: int, col: Color, esp := 0.0) -> Label:
 	l.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_boite.add_child(l)
 	return l
+
+
+## Désigne le bouton qui prendra le focus : celui sur lequel Entrée doit agir.
+##
+## Explicite, et non déduit de « premier bouton accentué » : sur l'écran-titre
+## le premier accentué est le sélecteur de difficulté, si bien qu'Entrée
+## changeait la difficulté au lieu de lancer la partie.
+func _focus(b: Button) -> Button:
+	_principal = b
+	return b
 
 
 func _espace(h: int) -> void:
@@ -95,6 +117,10 @@ func _bouton(t: String, appui: Callable, accent := false) -> Button:
 		appui.call())
 	b.mouse_entered.connect(func(): Audio.play_2d("ui_move", -24.0))
 	_boite.add_child(b)
+	# Le bouton principal prend le focus : on peut alors traverser tout le menu
+	# au clavier (flèches puis Entrée) sans jamais toucher la souris. Sans cela
+	# aucun élément n'était focalisable et la navigation clavier n'existait pas.
+
 	return b
 
 
@@ -169,6 +195,8 @@ func _sur_phase(p: int) -> void:
 func _afficher(e: Ecran) -> void:
 	_ecran = e
 	_vider()
+	if _defilement:
+		_defilement.scroll_vertical = 0
 	_voile.visible = e != Ecran.AUCUN
 	visible = e != Ecran.AUCUN
 	if e == Ecran.AUCUN:
@@ -179,6 +207,15 @@ func _afficher(e: Ecran) -> void:
 		Ecran.PAUSE:    _ecran_pause()
 		Ecran.MORT:     _ecran_mort()
 		Ecran.VICTOIRE: _ecran_victoire()
+		Ecran.JOURNAL:  _ecran_journal()
+		Ecran.DOSSIER:  _ecran_dossier()
+	# Le focus se prend une fois l'écran entièrement construit : on peut alors
+	# traverser tout le menu au clavier (flèches puis Entrée) sans souris.
+	# Appel direct, pas différé : les boutons sont déjà dans l'arbre ici, alors
+	# qu'un appel différé s'exécutait après un éventuel changement d'écran, sur
+	# un bouton déjà libéré.
+	if _principal and _principal.is_inside_tree():
+		_principal.grab_focus()
 
 
 func _ecran_titre() -> void:
@@ -202,16 +239,20 @@ func _ecran_titre() -> void:
 
 	_espace(10)
 	if GameState.a_un_point_de_controle():
-		_bouton("Reprendre la descente", func():
+		_focus(_bouton("Reprendre la descente", func():
 			GameState.reprendre()
-			_relancer(), true)
+			_relancer(), true))
 		_bouton("Recommencer depuis le début", func():
 			GameState.effacer_point_de_controle()
 			_relancer())
 	else:
-		_bouton("Descendre", func():
+		_focus(_bouton("Descendre", func():
 			GameState.effacer_point_de_controle()
-			_relancer(), true)
+			_relancer(), true))
+	_bouton("Ce qu'on a retrouvé   (%d/%d)"
+			% [GameState.documents_trouves(), Lore.total()], func():
+		_retour = Ecran.TITRE
+		_afficher(Ecran.JOURNAL))
 	_bouton("Options", func():
 		_retour = Ecran.TITRE
 		_afficher(Ecran.OPTIONS))
@@ -252,16 +293,20 @@ func _ecran_options() -> void:
 	_bouton("Valeurs par défaut", func():
 		Settings.remettre_defauts()
 		_afficher(Ecran.OPTIONS))
-	_bouton("Retour", func(): _afficher(_retour), true)
+	_focus(_bouton("Retour", func(): _afficher(_retour), true))
 
 
 func _ecran_pause() -> void:
 	_texte("PAUSE", 40, OR)
 	_espace(16)
-	_bouton("Reprendre", func(): GameState.set_phase(GameState.Phase.JEU), true)
+	_focus(_bouton("Reprendre", func(): GameState.set_phase(GameState.Phase.JEU), true))
 	_bouton("Options", func():
 		_retour = Ecran.PAUSE
 		_afficher(Ecran.OPTIONS))
+	_bouton("Ce qu'on a retrouvé   (%d/%d)"
+			% [GameState.documents_trouves(), Lore.total()], func():
+		_retour = Ecran.PAUSE
+		_afficher(Ecran.JOURNAL))
 	_bouton("Recommencer la partie", func(): _relancer())
 	_bouton("Retour au titre", func(): _retour_titre())
 	_espace(12)
@@ -274,14 +319,14 @@ func _ecran_mort() -> void:
 	_releve()
 	_espace(14)
 	if GameState.a_un_point_de_controle():
-		_bouton("Reprendre au tableau électrique", func():
+		_focus(_bouton("Reprendre au tableau électrique", func():
 			GameState.reprendre()
-			_relancer(), true)
+			_relancer(), true))
 		_bouton("Recommencer depuis le début", func():
 			GameState.effacer_point_de_controle()
 			_relancer())
 	else:
-		_bouton("Recommencer", func(): _relancer(), true)
+		_focus(_bouton("Recommencer", func(): _relancer(), true))
 	_bouton("Retour au titre", func(): _retour_titre())
 
 
@@ -296,7 +341,7 @@ func _ecran_victoire() -> void:
 		_texte("★  MEILLEUR TEMPS EN %s" % Settings.nom_difficulte().to_upper(), 15, OR)
 	_releve()
 	_espace(14)
-	_bouton("Rejouer", func(): _relancer(), true)
+	_focus(_bouton("Rejouer", func(): _relancer(), true))
 	_bouton("Retour au titre", func(): _retour_titre())
 
 
@@ -331,6 +376,59 @@ func _releve() -> void:
 		b.add_theme_color_override("font_color", GRIS)
 		g.add_child(b)
 	_boite.add_child(g)
+
+
+## Journal : ce que le joueur a retrouvé de l'histoire, chapitre par chapitre.
+##
+## Se construit depuis Lore : une mise à jour qui ajoute un chapitre le fait
+## apparaître ici toute seule, avec son compte, et les découvertes déjà faites
+## restent acquises. C'est ce qui donne au joueur une raison de redescendre.
+func _ecran_journal() -> void:
+	_texte("CE QU'ON A RETROUVÉ", 34, OR)
+	_texte("%d documents sur %d" % [GameState.documents_trouves(), Lore.total()],
+			14, SOURD)
+	_espace(12)
+
+	for n in Lore.chapitres():
+		var docs: Array = Lore.du_chapitre(n)
+		var lus := 0
+		for d in docs:
+			if GameState.a_lu(str(d["id"])):
+				lus += 1
+		_espace(8)
+		_texte("%s   —   %d/%d" % [Lore.CHAPITRES[n], lus, docs.size()],
+				17, OR if lus > 0 else SOURD)
+		for d in docs:
+			var id := str(d["id"])
+			if GameState.a_lu(id):
+				_bouton("   " + str(d["titre"]), func(): _ouvrir_dossier(id))
+			else:
+				# une entrée jamais trouvée reste visible mais muette : le joueur
+				# sait qu'il lui manque quelque chose, sans savoir quoi
+				_texte("   ·  ·  ·", 15, SOURD)
+
+	_espace(16)
+	_focus(_bouton("Retour", func(): _afficher(_retour), true))
+
+
+var _dossier := ""
+
+
+func _ouvrir_dossier(id: String) -> void:
+	_dossier = id
+	_afficher(Ecran.DOSSIER)
+
+
+## Relecture d'un document depuis le journal.
+func _ecran_dossier() -> void:
+	var d: Dictionary = Lore.doc(_dossier)
+	_texte(str(d.get("titre", "")), 24, OR)
+	_texte(Lore.CHAPITRES.get(int(d.get("chap", 1)), ""), 13, SOURD)
+	_espace(14)
+	var corps := _texte(str(d.get("texte", "")), 15, GRIS, 5)
+	corps.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_espace(16)
+	_focus(_bouton("Retour", func(): _afficher(Ecran.JOURNAL), true))
 
 
 # ==========================================================================

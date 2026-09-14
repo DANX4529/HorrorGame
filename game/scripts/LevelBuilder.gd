@@ -63,6 +63,8 @@ var nav_total := 0
 var patrol_points: PackedVector3Array = []
 var fuse_spawns: PackedVector3Array = []
 var battery_spawns: PackedVector3Array = []
+## Documents du récit : [{ "id": String, "pos": Vector3 }, ...]
+var document_spawns: Array[Dictionary] = []
 var hiding_spots: Array[Node3D] = []
 var fusebox: Node3D = null
 var exit_gate: Node3D = null
@@ -632,6 +634,13 @@ func is_solid(g: Vector2i) -> bool:
 	return solid_grid.has(g)
 
 
+## Case de la CARTE (pas de la grille de navigation) contenant ce point.
+## world_to_grid() travaille au pas de 0.5 m, world_to_cell() au pas de 4 m :
+## confondre les deux donne des coordonnées qui ne désignent rien.
+func world_to_cell(w: Vector3) -> Vector2i:
+	return Vector2i(roundi(w.x / CELL), roundi(w.z / CELL))
+
+
 func world_to_grid(w: Vector3) -> Vector2i:
 	return Vector2i(roundi(w.x / NAV_RES), roundi(w.z / NAV_RES))
 
@@ -682,6 +691,8 @@ func _pick_spawns() -> void:
 		if not placed:
 			push_warning("Aucun emplacement atteignable pour le fusible %d" % (i + 1))
 
+	_placer_documents()
+
 	var bat_rooms := ["C", "H", "D", "E", "S", "R"]
 	for i in 5:
 		var pool: Array = []
@@ -696,6 +707,82 @@ func _pick_spawns() -> void:
 			battery_spawns.append(spot)
 
 
+## Répartit les documents du récit dans les salles qui leur donnent un sens.
+##
+## Chaque document nomme les types de salle où il a sa place : un dossier
+## clinique en salle de soins, une lettre de pensionnaire au dortoir, l'ordre
+## d'évacuation près du monte-charge. Le lieu fait donc partie du récit.
+##
+## Piloté par la table Lore.DOCUMENTS : un chapitre ajouté plus tard se place
+## tout seul, sans toucher à cette fonction. Quand un type de salle est déjà
+## saturé, on déborde sur les couloirs plutôt que d'empiler deux documents au
+## même endroit — mieux vaut un document mal situé qu'un document introuvable.
+func _placer_documents() -> void:
+	var par_type := {}
+	for cell in _cells:
+		var c: String = _cells[cell]
+		if not par_type.has(c):
+			par_type[c] = []
+		par_type[c].append(cell)
+	for k in par_type:
+		_shuffle(par_type[k])
+
+	var prises: Array[Vector2i] = []
+	var poses: Array[Vector3] = []
+	for d in Lore.DOCUMENTS:
+		var lieux: Array = d.get("lieu", [])
+		if lieux.is_empty():
+			lieux = ["C"]
+		var cell := _cellule_pour_document(par_type, lieux, prises)
+		if cell == Vector2i(-9999, -9999):
+			push_warning("Aucune salle pour le document %s" % d["id"])
+			continue
+		# _free_spot cherche dans un rayon de 1.6 m alors que les cases font 4 m :
+		# deux documents logés dans des cases voisines d'une même salle peuvent
+		# atterrir côte à côte, et la liasse du dessus masque celle du dessous.
+		var spot := _free_spot(world_of(cell.x, cell.y), 1.6, poses, DOC_ECART_MIN)
+		poses.append(spot)
+		if not _reachable(spot):
+			continue
+		prises.append(cell)
+		document_spawns.append({"id": str(d["id"]), "pos": spot})
+
+
+const DOC_ECART_MIN := 1.6      ## mètres entre deux documents posés
+
+
+## Choisit une case pour un document.
+##
+## L'ordre compte : on préfère TOUJOURS une case encore libre, même d'un type
+## moins pertinent, à une case déjà prise du bon type. Deux documents empilés
+## au même endroit se cachent l'un l'autre — le joueur en ramasse un et ne
+## saura jamais que l'autre était là. Un document dans une salle imparfaite
+## reste lisible ; un document invisible est du texte perdu.
+func _cellule_pour_document(par_type: Dictionary, lieux: Array,
+		prises: Array[Vector2i]) -> Vector2i:
+	# 1. une salle du bon type, encore libre
+	for l in lieux:
+		for cell in par_type.get(l, []):
+			if not (cell in prises):
+				return cell
+	# 2. un couloir libre — neutre, toujours traversé
+	for cell in par_type.get("C", []):
+		if not (cell in prises):
+			return cell
+	# 3. n'importe quelle salle libre plutôt qu'un empilement
+	for l in par_type:
+		if l == "." or l == "M":
+			continue
+		for cell in par_type[l]:
+			if not (cell in prises):
+				return cell
+	# 4. en dernier recours seulement, on double une case du bon type
+	for l in lieux:
+		for cell in par_type.get(l, []):
+			return cell
+	return Vector2i(-9999, -9999)
+
+
 func _reachable(w: Vector3) -> bool:
 	return not solid_grid.has(world_to_grid(w))
 
@@ -704,7 +791,16 @@ func _reachable(w: Vector3) -> bool:
 ## On balaie la grille de navigation au lieu de tirer au hasard : dans une
 ## pièce meublée, un tirage aléatoire échoue presque toujours et finissait
 ## par déposer les fusibles à l'intérieur des meubles.
-func _free_spot(center: Vector3, radius := 1.6) -> Vector3:
+## Emplacement libre autour d'un point.
+##
+## `evite` / `ecart` écartent les emplacements trop proches de points déjà
+## occupés. Filtrer les candidats AVANT le tirage plutôt que retirer au hasard
+## ensuite est ce qui rend la contrainte tenable : une salle exiguë n'offre
+## souvent que deux ou trois cases libres, et retirer dedans redonne
+## indéfiniment les mêmes.
+func _free_spot(center: Vector3, radius := 1.6, evite: Array[Vector3] = [],
+		ecart := 0.0) -> Vector3:
+	var replis: Array[Vector3] = []
 	for r in [radius, radius + 0.9, radius + 1.8]:
 		var found: Array[Vector3] = []
 		var g0 := world_to_grid(center - Vector3(r, 0, r))
@@ -714,10 +810,25 @@ func _free_spot(center: Vector3, radius := 1.6) -> Vector3:
 				var g := Vector2i(gx, gy)
 				if solid_grid.has(g) or not nav_rect.has_point(g):
 					continue
-				found.append(grid_to_world(g))
+				var w := grid_to_world(g)
+				if ecart > 0.0 and not _loin_de(w, evite, ecart):
+					replis.append(w)
+					continue
+				found.append(w)
 		if not found.is_empty():
 			return found[_rng.randi() % found.size()]
+	# aucun emplacement ne respecte l'écart : mieux vaut un document un peu
+	# trop proche qu'un document jamais posé.
+	if not replis.is_empty():
+		return replis[_rng.randi() % replis.size()]
 	return center
+
+
+func _loin_de(w: Vector3, points: Array[Vector3], ecart: float) -> bool:
+	for p in points:
+		if w.distance_to(p) < ecart:
+			return false
+	return true
 
 
 func _shuffle(a: Array) -> void:

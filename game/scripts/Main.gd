@@ -41,9 +41,15 @@ var dbg_menutest := false
 var dbg_lisibilite := false
 var dbg_bruit := -1.0
 var dbg_menace := -1.0
+var dbg_lore := false
+var dbg_doc := ""
+var dbg_tpdoc := -1
 
 
 func _ready() -> void:
+	# Les phases PAUSE et LECTURE figent l'arbre. Sans ceci, _process ne
+	# tournerait plus et la touche qui referme un document ne serait jamais lue.
+	process_mode = Node.PROCESS_MODE_ALWAYS
 	randomize()
 	_parse_cmdline()
 	_build_world()
@@ -93,6 +99,12 @@ func _parse_cmdline() -> void:
 			dbg_menutest = true
 		elif args[i] == "--lisibilite":
 			dbg_lisibilite = true
+		elif args[i] == "--loretest":
+			dbg_lore = true
+		elif args[i] == "--doc" and i + 1 < args.size():
+			dbg_doc = args[i + 1]
+		elif args[i] == "--tpdoc" and i + 1 < args.size():
+			dbg_tpdoc = int(args[i + 1])
 		elif args[i] == "--bruit" and i + 1 < args.size():
 			dbg_bruit = float(args[i + 1])
 		elif args[i] == "--menace" and i + 1 < args.size():
@@ -161,6 +173,8 @@ func _build_world() -> void:
 		_run_menu_test()
 	if dbg_lisibilite:
 		_run_lisibilite_test()
+	if dbg_lore:
+		_run_lore_test()
 	if shot_frames >= 0:
 		_do_shot()
 
@@ -247,6 +261,14 @@ func _apply_debug() -> void:
 		player.set_look(dbg_yaw, dbg_pitch)
 	if dbg_lum >= 0.0:
 		Settings.luminosite = dbg_lum
+	if dbg_tpdoc >= 0 and player and level.document_spawns.size() > dbg_tpdoc:
+		var d: Dictionary = level.document_spawns[dbg_tpdoc]
+		var pos: Vector3 = d["pos"]
+		# la caméra regarde -Z quand yaw vaut 0 : on se place donc EN +Z du
+		# document et on garde yaw = 0 pour l'avoir en face
+		player.global_position = pos + Vector3(0, 1.05, 1.4)
+		player.set_look(0.0, -0.52)
+		print("TPDOC  %s a (%.1f, %.1f)" % [d["id"], pos.x, pos.z])
 	if dbg_ecran != "" and menu:
 		match dbg_ecran:
 			"titre":    GameState.set_phase(GameState.Phase.TITRE, true)
@@ -254,6 +276,16 @@ func _apply_debug() -> void:
 			"pause":    GameState.set_phase(GameState.Phase.PAUSE, true)
 			"mort":     GameState.set_phase(GameState.Phase.MORT, true)
 			"victoire": GameState.set_phase(GameState.Phase.VICTOIRE, true)
+			"journal":
+				# on marque quelques documents comme trouvés : un journal vide
+				# ne montrerait pas la mise en page réelle
+				for i in 6:
+					GameState.lire_document(str(Lore.DOCUMENTS[i]["id"]))
+				menu._afficher(menu.Ecran.JOURNAL)
+			"lecture":
+				GameState.set_phase(GameState.Phase.JEU, true)
+				GameState.ouvrir_document(dbg_doc if dbg_doc != "" \
+						else str(Lore.DOCUMENTS[0]["id"]))
 	if dbg_nopost:
 		# inspection de la géométrie : sans grain ni vignettage, le
 		# scintillement du tampon de profondeur devient évident.
@@ -328,6 +360,20 @@ func _spawn_pickups() -> void:
 		holder.add_child(n)
 		n.setup("battery", bat_scene, p)
 
+	# Les documents du récit vivent dans leur PROPRE noeud, pas parmi les
+	# ramassables. Mêlés à eux, ils cassaient le parcours des objectifs, qui
+	# lisait `kind` sur chaque enfant — une propriété qu'un document n'a pas.
+	# Deux familles d'objets, deux conteneurs.
+	var docs := Node3D.new()
+	docs.name = "Documents"
+	add_child(docs)
+	var papiers: PackedScene = load("res://assets/models/props/papers.glb")
+	for d in level.document_spawns:
+		var n := preload("res://scripts/Document.gd").new()
+		docs.add_child(n)
+		n.setup(d["id"], papiers, (d["pos"] as Vector3) + Vector3(0, 0.02, 0),
+				randf() * TAU)
+
 
 func _spawn_veilleuse() -> void:
 	veilleuse = Veilleuse.new()
@@ -347,6 +393,15 @@ func _spawn_veilleuse() -> void:
 
 # --------------------------------------------------------------------------
 func _process(delta: float) -> void:
+	# Un document ouvert se referme avec la touche qui l'a ouvert, ou Échap.
+	# Prioritaire sur la pause : sinon Échap sur un document ouvrirait le menu
+	# par-dessus la feuille.
+	if GameState.phase == GameState.Phase.LECTURE:
+		if Input.is_action_just_pressed("interact") \
+				or Input.is_action_just_pressed("pause"):
+			GameState.fermer_document()
+		return
+
 	if Input.is_action_just_pressed("pause"):
 		if GameState.phase == GameState.Phase.JEU:
 			GameState.set_phase(GameState.Phase.PAUSE)
@@ -849,6 +904,206 @@ func _run_lisibilite_test() -> void:
 
 func _nom_etat(e: int) -> String:
 	return ["PATROUILLE", "INVESTIGATION", "CHASSE", "ATTAQUE"][e]
+
+
+## Vérifie le système de récit : que TOUT le texte écrit soit réellement
+## atteignable en jeu, que la lecture fonctionne, et qu'elle se conserve.
+##
+## Le risque propre à ce système est silencieux : un document mal placé ne
+## plante rien, il devient simplement invisible, et un joueur ne saura jamais
+## qu'il lui manque un morceau de l'histoire.
+func _run_lore_test() -> void:
+	await get_tree().process_frame
+	var ok := true
+	DirAccess.remove_absolute(GameState.FICHIER_PROGRESSION)
+	GameState.documents_lus.clear()
+
+	# --- 1. tout document écrit est placé, et atteignable ---
+	var places := {}
+	for d in level.document_spawns:
+		places[d["id"]] = d["pos"]
+	print("LORE  documents ecrits=%d  places dans le niveau=%d"
+			% [Lore.total(), places.size()])
+	var manquants := []
+	for d in Lore.DOCUMENTS:
+		if not places.has(d["id"]):
+			manquants.append(d["id"])
+	if not manquants.is_empty():
+		print("LORE  ! jamais places : %s" % str(manquants))
+		ok = false
+
+	var hors := []
+	for id in places:
+		if not level._reachable(places[id]):
+			hors.append(id)
+	if not hors.is_empty():
+		print("LORE  ! places dans un mur : %s" % str(hors))
+		ok = false
+
+	# --- 2. pas deux documents au même endroit ---
+	var doublons := 0
+	var ecart_min := 9999.0
+	var ids_places := places.keys()
+	for i in ids_places.size():
+		for j in range(i + 1, ids_places.size()):
+			var a: Vector3 = places[ids_places[i]]
+			var b: Vector3 = places[ids_places[j]]
+			var d := a.distance_to(b)
+			ecart_min = minf(ecart_min, d)
+			if d < level.DOC_ECART_MIN:
+				doublons += 1
+				print("LORE  ! %s et %s a %.2f m l'un de l'autre"
+						% [ids_places[i], ids_places[j], d])
+	print("LORE  ecart minimal entre deux documents : %.2f m (exige %.2f)"
+			% [ecart_min, level.DOC_ECART_MIN])
+	if doublons > 0:
+		ok = false
+
+	# --- 3. chacun tombe-t-il dans une salle qui lui donne du sens ? ---
+	var bien := 0
+	for d in Lore.DOCUMENTS:
+		if not places.has(d["id"]):
+			continue
+		# level est typé Node3D : l'appel est dynamique, donc le type de retour
+		# ne s'infère pas. Sans annotation, l'analyse échoue et le jeu se fige
+		# au démarrage sans le moindre message.
+		var g: Vector2i = level.world_to_cell(places[d["id"]])
+		var c: String = level._cells.get(g, "")
+		if c in (d.get("lieu", []) as Array):
+			bien += 1
+	print("LORE  places dans une salle pertinente : %d / %d" % [bien, places.size()])
+	if bien < places.size() * 0.75:
+		print("LORE  ! trop de documents echouent hors de leur salle")
+		ok = false
+
+	# --- 4. objets lisibles réellement présents dans la scène ---
+	var noeuds := get_node("Documents").get_child_count()
+	print("LORE  objets lisibles instancies : %d" % noeuds)
+	if noeuds != places.size():
+		ok = false
+
+	# --- 4 bis. le joueur peut-il REELLEMENT en attraper un ? ---
+	# Un document est posé au sol à 2 cm ; le rayon d'interaction part de la
+	# caméra à hauteur d'homme. Rien ne garantit qu'il touche la petite sphère
+	# de collision. C'est le même piège qui avait rendu les portes inutilisables :
+	# l'objet existait, mais le rayon ne le trouvait jamais.
+	GameState.set_phase(GameState.Phase.JEU, true)
+	var vises := 0
+	var total_postures := 0
+	var essais = mini(6, level.document_spawns.size())
+	for i in essais:
+		var pos: Vector3 = level.document_spawns[i]["pos"]
+		var postures := 0
+		# on balaie les postures plausibles d'un joueur qui s'approche : reculs
+		# de 0.8 à 2.0 m, regard de 30° à 50° vers le bas
+		for d in [0.8, 1.2, 1.6, 2.0]:
+			for pitch in [-0.9, -0.7, -0.5]:
+				# les PIEDS au niveau du sol : l'origine du joueur est à ses
+				# pieds et la caméra se place au-dessus. Ajouter une hauteur ici
+				# éloignait la caméra du sol au point que le rayon n'atteignait
+				# plus rien du tout.
+				player.global_position = Vector3(pos.x, pos.y, pos.z + d)
+				player.set_look(0.0, pitch)
+				player.ray.force_raycast_update()
+				var t := player.current_target()
+				if t != null and t.get_script() == preload("res://scripts/Document.gd"):
+					postures += 1
+		total_postures += postures
+		if postures >= 6:
+			vises += 1
+	print("LORE  attrapables confortablement : %d / %d  (%.1f postures valides sur 12 en moyenne)"
+			% [vises, essais, float(total_postures) / maxi(essais, 1)])
+	if vises < essais:
+		print("LORE  ! des documents sont visibles mais penibles ou impossibles a ramasser")
+		ok = false
+
+	# --- 5. lecture : phase, enregistrement, fermeture ---
+	GameState.set_phase(GameState.Phase.JEU, true)
+	var premier: String = str(Lore.DOCUMENTS[0]["id"])
+	var neuf := GameState.a_lu(premier)
+	GameState.ouvrir_document(premier)
+	var en_lecture: bool = GameState.phase == GameState.Phase.LECTURE
+	var fige: bool = get_tree().paused
+	var enregistre: bool = GameState.a_lu(premier)
+	GameState.fermer_document()
+	var revenu: bool = GameState.phase == GameState.Phase.JEU and not get_tree().paused
+	print("LORE  lecture : deja_lu_avant=%s  phase LECTURE=%s  monde fige=%s  enregistre=%s  retour au jeu=%s"
+			% [neuf, en_lecture, fige, enregistre, revenu])
+	if neuf or not en_lecture or not fige or not enregistre or not revenu:
+		ok = false
+
+	# --- 6. la découverte se conserve d'une descente à l'autre ---
+	for d in Lore.DOCUMENTS:
+		GameState.lire_document(str(d["id"]))
+	var avant := GameState.documents_trouves()
+	GameState.documents_lus.clear()
+	var relu := ConfigFile.new()
+	relu.load(GameState.FICHIER_PROGRESSION)
+	for id in relu.get_value("documents", "lus", []):
+		GameState.documents_lus[id] = true
+	print("LORE  persistance : %d lus -> %d relus depuis le disque"
+			% [avant, GameState.documents_trouves()])
+	if avant != Lore.total() or GameState.documents_trouves() != avant:
+		ok = false
+
+	# --- 7. cohérence de la table elle-même ---
+	var ids := {}
+	var vides := []
+	for d in Lore.DOCUMENTS:
+		var i: String = str(d["id"])
+		if ids.has(i):
+			print("LORE  ! identifiant en double : %s" % i)
+			ok = false
+		ids[i] = true
+		if str(d.get("titre", "")).is_empty() or str(d.get("texte", "")).length() < 40:
+			vides.append(i)
+		if not Lore.CHAPITRES.has(int(d.get("chap", 0))):
+			print("LORE  ! chapitre inconnu pour %s" % i)
+			ok = false
+	if not vides.is_empty():
+		print("LORE  ! documents vides ou trop courts : %s" % str(vides))
+		ok = false
+	var repartition := []
+	for n in Lore.chapitres():
+		repartition.append("%d:%s (%d)" % [n, Lore.CHAPITRES[n], Lore.du_chapitre(n).size()])
+	print("LORE  chapitres  " + "  |  ".join(repartition))
+
+	# --- 8. le journal doit rester utilisable quand le récit grossit ---
+	# C'est la promesse du système : ajouter un chapitre ne doit rien casser.
+	# Or l'écran poussait son bouton de sortie hors de l'écran dès 14 entrées.
+	for i in 6:
+		GameState.lire_document(str(Lore.DOCUMENTS[i]["id"]))
+	menu._afficher(menu.Ecran.JOURNAL)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var entrees := 0
+	var lus_cliquables := 0
+	for c in menu._boite.get_children():
+		if c is Button:
+			lus_cliquables += 1
+		if c is Label and "·" in (c as Label).text:
+			entrees += 1
+	var retour := _trouver_bouton(menu, "Retour")
+	# le bouton de sortie doit être ATTEIGNABLE, donc soit dans l'écran, soit
+	# accessible par défilement
+	# menu est typé CanvasLayer : l'accès à ses membres rend du Variant, donc
+	# rien ne s'infère. Sans annotation, le jeu se fige au démarrage sans message.
+	var haut_contenu: float = menu._boite.get_combined_minimum_size().y
+	var haut_vue: float = menu._defilement.size.y
+	var atteignable: bool = retour != null and (haut_contenu <= haut_vue
+			or menu._defilement.get_v_scroll_bar().max_value >= haut_contenu - 1.0)
+	print("LORE  journal : %d titres lisibles + %d entrees masquees = %d / %d"
+			% [lus_cliquables - 1, entrees, lus_cliquables - 1 + entrees, Lore.total()])
+	print("LORE  journal : contenu %.0f px, vue %.0f px, sortie atteignable=%s"
+			% [haut_contenu, haut_vue, atteignable])
+	if lus_cliquables - 1 + entrees != Lore.total() or not atteignable:
+		ok = false
+	menu._afficher(menu.Ecran.AUCUN)
+
+	DirAccess.remove_absolute(GameState.FICHIER_PROGRESSION)
+	GameState.documents_lus.clear()
+	print("LORE RESULTAT : %s" % ("OK" if ok else "ECHEC"))
+	get_tree().quit()
 
 
 func _do_shot() -> void:

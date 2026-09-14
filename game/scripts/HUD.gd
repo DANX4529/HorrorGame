@@ -23,6 +23,7 @@ var _dark := 0.0
 var _bruit := 0.0            ## impulsion de bruit en cours, 0..1
 var _menace := Vector2.ZERO  ## direction écran de la Veilleuse
 var _menace_f := 0.0         ## force du signal de menace, 0..1
+var _feuille: Control        ## panneau de lecture d'un document
 
 
 func _ready() -> void:
@@ -34,7 +35,9 @@ func _ready() -> void:
 	# les mouvements destinés à la vue. Les Control sont en MOUSE_FILTER_STOP
 	# par défaut, y compris le réticule placé au centre exact de l'écran.
 	_ignore_mouse(self)
+	_build_feuille()
 	NoiseBus.noise.connect(_on_noise)
+	GameState.document_ouvert.connect(_on_document)
 	GameState.message.connect(_on_message)
 	GameState.phase_changed.connect(_on_phase)
 	GameState.fuses_changed.connect(func(_a, _b): _refresh_objective())
@@ -263,6 +266,8 @@ func _on_died() -> void:
 
 func _on_phase(p: int) -> void:
 	_ui.visible = (p == GameState.Phase.JEU)
+	if _feuille:
+		_feuille.visible = (p == GameState.Phase.LECTURE)
 
 
 # --------------------------------------------------------------------------
@@ -304,3 +309,91 @@ func _update_menace(delta: float) -> void:
 			cible *= 1.15
 		_menace = dir.normalized() if dir.length() > 0.001 else Vector2.RIGHT
 	_menace_f = move_toward(_menace_f, clampf(cible, 0.0, 1.0), delta * (2.2 if cible > _menace_f else 1.1))
+
+
+# --------------------------------------------------------------------------
+#  Lecture d'un document
+# --------------------------------------------------------------------------
+## Construit la feuille de lecture.
+##
+## Rendue comme une page posée devant soi, pas comme une boîte de dialogue :
+## fond papier, texte à chasse fixe, marges larges. Le reste de l'écran est
+## noirci sans l'être tout à fait — on doit continuer à sentir la pièce autour.
+func _build_feuille() -> void:
+	_feuille = Control.new()
+	_feuille.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_feuille.visible = false
+	_feuille.process_mode = Node.PROCESS_MODE_ALWAYS
+	add_child(_feuille)
+
+	var voile := ColorRect.new()
+	voile.color = Color(0.0, 0.0, 0.0, 0.82)
+	voile.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_feuille.add_child(voile)
+
+	# La page se dimensionne sur son contenu : à hauteur fixe, un document
+	# court laissait une grande moitié de papier vide sous le texte.
+	var centre := CenterContainer.new()
+	centre.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_feuille.add_child(centre)
+
+	var page := PanelContainer.new()
+	page.custom_minimum_size = Vector2(660, 0)
+	var st := StyleBoxFlat.new()
+	st.bg_color = Color(0.847, 0.816, 0.741)          # papier jauni
+	st.border_color = Color(0.36, 0.33, 0.28)
+	st.set_border_width_all(1)
+	st.content_margin_left = 46; st.content_margin_right = 46
+	st.content_margin_top = 34; st.content_margin_bottom = 30
+	page.add_theme_stylebox_override("panel", st)
+	centre.add_child(page)
+
+	var col := VBoxContainer.new()
+	col.add_theme_constant_override("separation", 14)
+	page.add_child(col)
+
+	var titre := Label.new()
+	titre.name = "Titre"
+	titre.add_theme_font_size_override("font_size", 19)
+	titre.add_theme_color_override("font_color", Color(0.16, 0.13, 0.10))
+	titre.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	titre.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(titre)
+
+	var filet := ColorRect.new()
+	filet.color = Color(0.36, 0.33, 0.28, 0.55)
+	filet.custom_minimum_size = Vector2(0, 1)
+	col.add_child(filet)
+
+	var corps := Label.new()
+	corps.name = "Corps"
+	corps.add_theme_font_size_override("font_size", 16)
+	corps.add_theme_color_override("font_color", Color(0.19, 0.16, 0.13))
+	corps.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	col.add_child(corps)
+
+	var ecart := Control.new()
+	ecart.custom_minimum_size = Vector2(0, 10)
+	col.add_child(ecart)
+
+	var pied := Label.new()
+	pied.name = "Pied"
+	pied.add_theme_font_size_override("font_size", 13)
+	pied.add_theme_color_override("font_color", Color(0.40, 0.36, 0.30))
+	pied.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	col.add_child(pied)
+
+	_ignore_mouse(_feuille)
+
+
+func _on_document(id: String) -> void:
+	var d: Dictionary = Lore.doc(id)
+	if d.is_empty() or _feuille == null:
+		return
+	var page := _feuille.get_child(1).get_child(0)
+	var col := page.get_child(0)
+	(col.get_node("Titre") as Label).text = str(d.get("titre", ""))
+	(col.get_node("Corps") as Label).text = str(d.get("texte", ""))
+	(col.get_node("Pied") as Label).text = "%s  ·  %d / %d documents  ·  [E] refermer" % [
+			Lore.CHAPITRES.get(int(d.get("chap", 1)), ""),
+			GameState.documents_trouves(), Lore.total()]

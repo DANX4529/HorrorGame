@@ -4,7 +4,7 @@ extends Node
 ## Les actions d'entrée sont déclarées ici plutôt que dans project.godot :
 ## c'est plus lisible, et ça permet de gérer AZERTY et QWERTY d'un seul geste.
 
-enum Phase { TITRE, JEU, PAUSE, MORT, VICTOIRE }
+enum Phase { TITRE, JEU, PAUSE, MORT, VICTOIRE, LECTURE }
 
 signal phase_changed(p: Phase)
 signal fuses_changed(n: int, total: int)
@@ -44,6 +44,12 @@ var test_menu := 0
 ## dans sa vie, pas à chaque partie.
 var souffle_appris := false
 
+## Identifiants des documents déjà lus, toutes parties confondues. Le récit se
+## collectionne à travers les descentes : mourir ne fait pas oublier ce qu'on a
+## lu. Persisté, donc une mise à jour qui ajoute un chapitre laisse intact ce
+## que le joueur avait déjà.
+var documents_lus: Dictionary = {}
+
 const ACTIONS := {
 	"move_forward": [KEY_W, KEY_Z, KEY_UP],
 	"move_back":    [KEY_S, KEY_DOWN],
@@ -64,6 +70,8 @@ func _ready() -> void:
 	var c := ConfigFile.new()
 	if c.load(FICHIER_PROGRESSION) == OK:
 		souffle_appris = bool(c.get_value("didacticiel", "souffle", false))
+		for id in c.get_value("documents", "lus", []):
+			documents_lus[id] = true
 	for name in ACTIONS:
 		if not InputMap.has_action(name):
 			InputMap.add_action(name)
@@ -82,8 +90,12 @@ func set_phase(p: Phase, force := false) -> void:
 	if phase == p and not force:
 		return
 	phase = p
-	get_tree().paused = (p == Phase.PAUSE)
-	var captured := (p == Phase.JEU)
+	# La lecture fige le monde. C'est délibéré : si lire coûtait la vie, les
+	# joueurs sauteraient les documents, et tout le récit deviendrait décoratif.
+	get_tree().paused = (p == Phase.PAUSE or p == Phase.LECTURE)
+	# la souris reste capturée pendant la lecture : rien à cliquer, et on
+	# revient au jeu sans reprise de contrôle visible
+	var captured := (p == Phase.JEU or p == Phase.LECTURE)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if captured else Input.MOUSE_MODE_VISIBLE
 	phase_changed.emit(p)
 
@@ -207,3 +219,52 @@ func apprendre_souffle() -> void:
 	c.load(FICHIER_PROGRESSION)
 	c.set_value("didacticiel", "souffle", true)
 	c.save(FICHIER_PROGRESSION)
+
+
+# --------------------------------------------------------------------------
+#  Récit
+# --------------------------------------------------------------------------
+signal document_lu(id: String)
+signal document_ouvert(id: String)
+
+## Identifiant du document affiché, "" si aucun.
+var document_ouvert_id := ""
+
+
+## Ouvre un document : bascule en phase LECTURE et l'enregistre comme lu.
+func ouvrir_document(id: String) -> void:
+	if phase != Phase.JEU:
+		return
+	document_ouvert_id = id
+	lire_document(id)
+	document_ouvert.emit(id)
+	set_phase(Phase.LECTURE)
+
+
+func fermer_document() -> void:
+	if phase != Phase.LECTURE:
+		return
+	document_ouvert_id = ""
+	set_phase(Phase.JEU)
+
+
+func a_lu(id: String) -> bool:
+	return documents_lus.has(id)
+
+
+## Marque un document comme lu et l'enregistre. Renvoie true si c'est une
+## découverte, false si le joueur l'avait déjà trouvé lors d'une autre descente.
+func lire_document(id: String) -> bool:
+	if documents_lus.has(id):
+		return false
+	documents_lus[id] = true
+	var c := ConfigFile.new()
+	c.load(FICHIER_PROGRESSION)
+	c.set_value("documents", "lus", documents_lus.keys())
+	c.save(FICHIER_PROGRESSION)
+	document_lu.emit(id)
+	return true
+
+
+func documents_trouves() -> int:
+	return documents_lus.size()

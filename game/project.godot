@@ -20,6 +20,7 @@ GameState="*res://scripts/GameState.gd"
 MaterialLib="*res://scripts/MaterialLib.gd"
 NoiseBus="*res://scripts/NoiseBus.gd"
 Audio="*res://scripts/AudioLib.gd"
+Lore="*res://scripts/Lore.gd"
 
 [audio]
 
