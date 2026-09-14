@@ -9,6 +9,7 @@ var level: Node3D
 var player: Player
 var veilleuse: Veilleuse
 var hud: CanvasLayer
+var prologue: CanvasLayer
 var menu: CanvasLayer
 var _amb: AudioStreamPlayer
 var _music: AudioStreamPlayer
@@ -48,6 +49,10 @@ var dbg_seed := 0
 var dbg_seedreport := false
 var dbg_seedcheck := false
 var dbg_verbose := false
+## Les tests enchaînent directement sur la partie : un prologue à traverser
+## ferait échouer toute vérification qui suppose la phase JEU au démarrage.
+var dbg_sansprologue := false
+var dbg_v1 := false
 
 
 func _ready() -> void:
@@ -117,6 +122,10 @@ func _parse_cmdline() -> void:
 			dbg_seedcheck = true
 		elif args[i] == "--verbose":
 			dbg_verbose = true
+		elif args[i] == "--sansprologue":
+			dbg_sansprologue = true
+		elif args[i] == "--v1test":
+			dbg_v1 = true
 		elif args[i] == "--bruit" and i + 1 < args.size():
 			dbg_bruit = float(args[i + 1])
 		elif args[i] == "--menace" and i + 1 < args.size():
@@ -172,12 +181,22 @@ func _build_world() -> void:
 	add_child(menu)
 	menu.bind(player)
 
+	# au-dessus du menu : le prologue couvre tout, y compris l'interface
+	prologue = preload("res://scripts/Prologue.gd").new()
+	prologue.name = "Prologue"
+	add_child(prologue)
+
 	if GameState.power_restored:
 		_rallumer()
 	# le menu a demandé d'enchaîner : on saute l'écran-titre
 	if GameState.demarrer_en_jeu:
 		GameState.demarrer_en_jeu = false
-		GameState.set_phase(GameState.Phase.JEU, true)
+		# une descente neuve commence par le prologue ; une reprise non
+		if GameState.montrer_prologue and not dbg_sansprologue:
+			GameState.montrer_prologue = false
+			GameState.set_phase(GameState.Phase.PROLOGUE, true)
+		else:
+			GameState.set_phase(GameState.Phase.JEU, true)
 	else:
 		GameState.set_phase(GameState.Phase.TITRE, true)
 
@@ -200,6 +219,8 @@ func _build_world() -> void:
 		_run_lisibilite_test()
 	if dbg_lore:
 		_run_lore_test()
+	if dbg_v1:
+		_run_v1_test()
 	if shot_frames >= 0:
 		_do_shot()
 
@@ -301,6 +322,11 @@ func _apply_debug() -> void:
 			"pause":    GameState.set_phase(GameState.Phase.PAUSE, true)
 			"mort":     GameState.set_phase(GameState.Phase.MORT, true)
 			"victoire": GameState.set_phase(GameState.Phase.VICTOIRE, true)
+			"credits":
+				menu._afficher(menu.Ecran.CREDITS)
+			"prologue":
+				GameState.montrer_prologue = true
+				GameState.set_phase(GameState.Phase.PROLOGUE, true)
 			"journal":
 				# on marque quelques documents comme trouvés : un journal vide
 				# ne montrerait pas la mise en page réelle
@@ -721,7 +747,14 @@ func _run_menu_test() -> void:
 		return
 
 	# --- après un rechargement déclenché par un bouton ---
-	var ETAT := ["TITRE", "JEU", "PAUSE", "MORT", "VICTOIRE"]
+	# Une descente neuve passe désormais par le prologue. On le traverse comme
+	# le ferait un joueur — en appuyant pour le passer — plutôt que de le
+	# désactiver : c'est ce chemin-là qu'il faut vérifier, pas un raccourci.
+	if GameState.phase == GameState.Phase.PROLOGUE:
+		print("MENUTEST  prologue affiche, on le passe")
+		prologue._terminer()
+		await get_tree().process_frame
+	var ETAT := ["TITRE", "JEU", "PAUSE", "MORT", "VICTOIRE", "LECTURE", "PROLOGUE"]
 	var etape: int = GameState.test_menu
 	var jouable: bool = (GameState.phase == GameState.Phase.JEU
 			and is_instance_valid(player) and player.can_move
@@ -1173,6 +1206,94 @@ func _run_lore_test() -> void:
 	DirAccess.remove_absolute(GameState.FICHIER_PROGRESSION)
 	GameState.documents_lus.clear()
 	print("LORE RESULTAT : %s" % ("OK" if ok else "ECHEC"))
+	get_tree().quit()
+
+
+## Prologue et crédits : les deux ajouts qui bouclent la V1.
+##
+## Ce qu'on vérifie ici est ce qui casse en silence : un prologue impossible à
+## passer (on recommence souvent, une descente étant tirée au sort), un
+## prologue qui ne rend jamais la main, un texte qui déborde de l'écran, ou des
+## crédits dont le bouton de sortie part hors cadre.
+func _run_v1_test() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var ok := true
+
+	# --- 1. découpage du prologue, et tenue à l'écran ---
+	GameState.montrer_prologue = true
+	GameState.set_phase(GameState.Phase.PROLOGUE, true)
+	await get_tree().process_frame
+	var temps: PackedStringArray = prologue._temps
+	print("V1  prologue : %d temps, duree estimee %.1f s, monde fige=%s"
+			% [temps.size(), prologue.duree_estimee(), get_tree().paused])
+	if temps.size() < 4 or not get_tree().paused:
+		ok = false
+	var trop_long := []
+	for b in temps:
+		var lignes: PackedStringArray = (b as String).split("\n")
+		# on affiche à 21 px avec 11 px d'interligne : au-delà de 6 lignes, ou
+		# d'une ligne de plus de 64 signes, le bloc sort du cadre
+		if lignes.size() > 6:
+			trop_long.append(b)
+		for l in lignes:
+			if (l as String).length() > 64:
+				trop_long.append(l)
+	print("V1  prologue : %d temps trop longs pour l'ecran (attendu 0)" % trop_long.size())
+	if not trop_long.is_empty():
+		print("V1  ! %s" % str(trop_long).substr(0, 160))
+		ok = false
+
+	# --- 2. il rend la main, et on peut le passer ---
+	prologue._terminer()
+	var rendu: bool = GameState.phase == GameState.Phase.JEU and not get_tree().paused
+	print("V1  prologue passe : phase=%s  monde relance=%s"
+			% [GameState.phase == GameState.Phase.JEU, not get_tree().paused])
+	if not rendu:
+		ok = false
+
+	# --- 3. une reprise ne le rejoue pas ---
+	GameState.nouvelle_descente()
+	var neuve: bool = GameState.montrer_prologue
+	GameState.fuses_installed = 2
+	GameState.poser_point_de_controle()
+	GameState.reprendre()
+	var reprise: bool = GameState.montrer_prologue
+	print("V1  descente neuve -> prologue=%s   reprise -> prologue=%s" % [neuve, reprise])
+	if not neuve or reprise:
+		ok = false
+	GameState.effacer_point_de_controle()
+
+	# --- 4. crédits : contenu réel et sortie atteignable ---
+	menu._afficher(menu.Ecran.CREDITS)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var textes := ""
+	for c in menu._boite.get_children():
+		if c is Label:
+			textes += (c as Label).text + "\n"
+	var attendus := ["Liam RIIS", "Godot", "Owlish", "rubberduck", "Fantozzi",
+			"qubodup", "Spring Spring", "Ogrebane", "CC0", "Blender"]
+	var absents := []
+	for a in attendus:
+		if not (a in textes):
+			absents.append(a)
+	print("V1  credits : %d lignes, mentions manquantes %s"
+			% [textes.split("\n").size() - 1, str(absents)])
+	if not absents.is_empty():
+		ok = false
+	var haut_contenu: float = menu._boite.get_combined_minimum_size().y
+	var haut_vue: float = menu._defilement.size.y
+	var sortie := _trouver_bouton(menu, "Retour")
+	var atteignable: bool = sortie != null and (haut_contenu <= haut_vue
+			or menu._defilement.get_v_scroll_bar().max_value >= haut_contenu - 1.0)
+	print("V1  credits : contenu %.0f px, vue %.0f px, sortie atteignable=%s"
+			% [haut_contenu, haut_vue, atteignable])
+	if not atteignable:
+		ok = false
+	menu._afficher(menu.Ecran.AUCUN)
+
+	print("V1 RESULTAT : %s" % ("OK" if ok else "ECHEC"))
 	get_tree().quit()
 
 

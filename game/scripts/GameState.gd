@@ -4,7 +4,7 @@ extends Node
 ## Les actions d'entrée sont déclarées ici plutôt que dans project.godot :
 ## c'est plus lisible, et ça permet de gérer AZERTY et QWERTY d'un seul geste.
 
-enum Phase { TITRE, JEU, PAUSE, MORT, VICTOIRE, LECTURE }
+enum Phase { TITRE, JEU, PAUSE, MORT, VICTOIRE, LECTURE, PROLOGUE }
 
 signal phase_changed(p: Phase)
 signal fuses_changed(n: int, total: int)
@@ -61,6 +61,11 @@ var documents_lus: Dictionary = {}
 ## avec le point de reprise.
 var graine := 0
 
+## Le prologue doit-il précéder la partie ? Vrai pour une descente neuve, faux
+## pour une reprise : on ne réexplique pas la situation à quelqu'un qui reprend
+## là où il est mort.
+var montrer_prologue := false
+
 const ACTIONS := {
 	"move_forward": [KEY_W, KEY_Z, KEY_UP],
 	"move_back":    [KEY_S, KEY_DOWN],
@@ -103,10 +108,11 @@ func set_phase(p: Phase, force := false) -> void:
 	phase = p
 	# La lecture fige le monde. C'est délibéré : si lire coûtait la vie, les
 	# joueurs sauteraient les documents, et tout le récit deviendrait décoratif.
-	get_tree().paused = (p == Phase.PAUSE or p == Phase.LECTURE)
+	get_tree().paused = (p == Phase.PAUSE or p == Phase.LECTURE
+			or p == Phase.PROLOGUE)
 	# la souris reste capturée pendant la lecture : rien à cliquer, et on
 	# revient au jeu sans reprise de contrôle visible
-	var captured := (p == Phase.JEU or p == Phase.LECTURE)
+	var captured := (p == Phase.JEU or p == Phase.LECTURE or p == Phase.PROLOGUE)
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED if captured else Input.MOUSE_MODE_VISIBLE
 	phase_changed.emit(p)
 
@@ -114,6 +120,7 @@ func set_phase(p: Phase, force := false) -> void:
 ## Ouvre une nouvelle descente : nouvelle graine, point de reprise effacé.
 func nouvelle_descente() -> void:
 	graine = randi_range(1, 0x7FFFFFFF)
+	montrer_prologue = true
 	effacer_point_de_controle()
 
 
@@ -168,6 +175,7 @@ func reprendre() -> void:
 	reprise_temps = float(c.get_value("reprise", "temps", 0.0))
 	# on retrouve le sous-sol exactement tel qu'on l'a quitté
 	graine = int(c.get_value("reprise", "graine", 0))
+	montrer_prologue = false
 	Settings.difficulte = clampi(int(c.get_value("reprise", "difficulte",
 			Settings.difficulte)), 0, 2)
 

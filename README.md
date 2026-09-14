@@ -5,8 +5,12 @@
 > *Et le bruit le plus fort dans un bâtiment vide, c'est votre propre respiration.*
 
 Jeu d'horreur psychologique à la première personne. **Godot 4.3.**
-Tous les assets — modèles, textures, animations, sons — sont **fabriqués par
-les scripts de ce dépôt**. Rien n'est téléchargé.
+Par **Liam RIIS**.
+
+Modèles, textures et animations sont **fabriqués par les scripts de ce
+dépôt** — aucune banque d'assets. Les sons mêlent des enregistrements
+**CC0 1.0** (récupérés par `tools/audio/sources.py`, crédités dans
+[`docs/CREDITS_AUDIO.md`](docs/CREDITS_AUDIO.md)) et de la synthèse.
 
 ---
 
@@ -219,3 +223,18 @@ Le niveau n'est pas placé à la main : `LevelBuilder.MAP` est une grille de
 caractères, et murs, portes, mobilier, éclairage, navigation et points
 d'apparition en sont déduits. Le plan forme un **anneau de couloirs** pour que
 le joueur puisse toujours contourner plutôt que se retrouver acculé.
+
+---
+
+## Crédits
+
+**Conception, écriture et réalisation : Liam RIIS.**
+
+Les crédits complets sont consultables en jeu, depuis l'écran-titre, et
+la liste des banques sonores se trouve dans
+[`docs/CREDITS_AUDIO.md`](docs/CREDITS_AUDIO.md). Tous les enregistrements
+sont sous **CC0 1.0** : leur redistribution est libre, et l'attribution est
+donnée par honnêteté plutôt que par obligation.
+
+Moteur : [Godot Engine 4.3](https://godotengine.org) (MIT).
+Outillage : Blender (via `bpy`), numpy, Pillow, ffmpeg.

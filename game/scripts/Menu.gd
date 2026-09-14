@@ -4,7 +4,7 @@ extends CanvasLayer
 ## Séparés du HUD, qui ne garde que l'affichage en cours de partie et le
 ## post-traitement. Tout est construit par code, comme le reste du projet.
 
-enum Ecran { AUCUN, TITRE, OPTIONS, PAUSE, MORT, VICTOIRE, JOURNAL, DOSSIER }
+enum Ecran { AUCUN, TITRE, OPTIONS, PAUSE, MORT, VICTOIRE, JOURNAL, DOSSIER, CREDITS }
 
 const OR := Color(0.87, 0.83, 0.74)
 const GRIS := Color(0.70, 0.72, 0.67)
@@ -209,6 +209,7 @@ func _afficher(e: Ecran) -> void:
 		Ecran.VICTOIRE: _ecran_victoire()
 		Ecran.JOURNAL:  _ecran_journal()
 		Ecran.DOSSIER:  _ecran_dossier()
+		Ecran.CREDITS:  _ecran_credits()
 	# Le focus se prend une fois l'écran entièrement construit : on peut alors
 	# traverser tout le menu au clavier (flèches puis Entrée) sans souris.
 	# Appel direct, pas différé : les boutons sont déjà dans l'arbre ici, alors
@@ -249,6 +250,9 @@ func _ecran_titre() -> void:
 			% [GameState.documents_trouves(), Lore.total()], func():
 		_retour = Ecran.TITRE
 		_afficher(Ecran.JOURNAL))
+	_bouton("Crédits", func():
+		_retour = Ecran.TITRE
+		_afficher(Ecran.CREDITS))
 	_bouton("Options", func():
 		_retour = Ecran.TITRE
 		_afficher(Ecran.OPTIONS))
@@ -375,6 +379,30 @@ func _releve() -> void:
 		b.add_theme_color_override("font_color", GRIS)
 		g.add_child(b)
 	_boite.add_child(g)
+
+
+## Crédits, construits depuis Lore.CREDITS : une section ajoutée s'affiche
+## toute seule, et l'écran défile déjà.
+func _ecran_credits() -> void:
+	var premier := true
+	for section in Lore.CREDITS:
+		var titre := str(section[0])
+		if titre != "":
+			_espace(12)
+			_texte(titre, 15, OR)
+		for ligne in section[1]:
+			var l := str(ligne)
+			if premier:
+				# la première ligne du premier bloc est le titre du jeu
+				_texte(l, 42, OR)
+				premier = false
+				continue
+			# les lignes indentées sont des précisions : plus petites, plus mates
+			var indente: bool = l.begins_with("   ")
+			_texte(l.strip_edges() if indente else l,
+					13 if indente else 15, SOURD if indente else GRIS)
+	_espace(18)
+	_focus(_bouton("Retour", func(): _afficher(_retour), true))
 
 
 ## Journal : ce que le joueur a retrouvé de l'histoire, chapitre par chapitre.

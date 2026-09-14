@@ -20,6 +20,89 @@ extends Node
 ##           leur donnait. En viser deux ou trois est la bonne pratique.
 ##   texte   le corps du document
 
+## Prologue, frappé à l'écran avant la première image du jeu.
+##
+## Il pose la situation SANS livrer le récit : le service, la date, le fait que
+## quelqu'un soit resté. Qui elle était, ce qu'on lui a fait et pourquoi elle
+## l'a demandé se découvrent dans les documents — un prologue qui raconterait
+## tout enlèverait toute raison de fouiller.
+##
+## Une ligne vide marque une respiration ; la frappe y marque un temps d'arrêt.
+const PROLOGUE := """Sanatorium du Mont-Cendre.
+
+Le service de veille occupait le niveau −1.
+On y plaçait ceux qui ne dormaient plus.
+
+On y soignait la peur en supprimant la lumière.
+
+Le 9 novembre 1961, le service a été fermé.
+Le courant coupé. Le monte-charge condamné.
+
+Tout le monde est remonté.
+
+Presque.
+
+Soixante ans ont passé.
+
+Vous descendez chercher un dossier
+que personne n'a jamais transmis.
+
+Le tableau électrique est au fond.
+Il manque quatre fusibles.
+
+Elle ne vous verra pas.
+
+Elle vous écoute."""
+
+
+## Crédits. Chaque entrée : [titre de section, lignes].
+##
+## Les enregistrements sont tous sous CC0 1.0 : l'attribution est donnée par
+## honnêteté, pas par obligation. Elle doit rester d'accord avec
+## docs/CREDITS_AUDIO.md, qui est engendré par tools/audio/sources.py.
+const CREDITS := [
+	["", [
+		"RESPIRE",
+		"Sanatorium du Mont-Cendre — 1961",
+	]],
+	["Conception, écriture et réalisation", [
+		"Liam RIIS",
+	]],
+	["Moteur", [
+		"Godot Engine 4.3 — licence MIT",
+		"godotengine.org",
+	]],
+	["Modèles et textures", [
+		"Créés pour ce jeu, sans banque d'assets.",
+		"Décors, mobilier et la Veilleuse sont bâtis par script",
+		"sous Blender ; les textures sont engendrées en numpy",
+		"(bruits tuilables, normales, occlusion).",
+	]],
+	["Enregistrements sonores — tous CC0 1.0", [
+		"Owlish Media (owlstorm) — Sound Effects Pack",
+		"      respiration, halètement, cri, pas, impacts",
+		"rubberduck — 100 CC0 metal and wood SFX",
+		"      portes, serrures, tôle, grincements",
+		"Fantozzi — Fantozzi's Footsteps",
+		"      pas sur pierre",
+		"qubodup — Ghost Monster Voice Moaning & Growling",
+		"      râles de la Veilleuse",
+		"Spring Spring — Dark Cavern Ambient",
+		"      nappe d'ambiance souterraine",
+		"Ogrebane — Heartbeat sounds",
+		"      battement de coeur",
+		"Tous sur opengameart.org",
+	]],
+	["Bande-son synthétisée", [
+		"Apnée, nappe de traque, remise sous tension et stings",
+		"sont synthétisés pour ce jeu (DSP numpy).",
+	]],
+	["Merci", [
+		"À celles et ceux qui ont testé dans le noir.",
+	]],
+]
+
+
 const CHAPITRES := {
 	1: "Le service de veille",
 	2: "La cure d'obscurité",
