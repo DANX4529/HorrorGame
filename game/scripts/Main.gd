@@ -44,6 +44,10 @@ var dbg_menace := -1.0
 var dbg_lore := false
 var dbg_doc := ""
 var dbg_tpdoc := -1
+var dbg_seed := 0
+var dbg_seedreport := false
+var dbg_seedcheck := false
+var dbg_verbose := false
 
 
 func _ready() -> void:
@@ -105,6 +109,14 @@ func _parse_cmdline() -> void:
 			dbg_doc = args[i + 1]
 		elif args[i] == "--tpdoc" and i + 1 < args.size():
 			dbg_tpdoc = int(args[i + 1])
+		elif args[i] == "--seed" and i + 1 < args.size():
+			dbg_seed = int(args[i + 1])
+		elif args[i] == "--seedreport":
+			dbg_seedreport = true
+		elif args[i] == "--seedcheck":
+			dbg_seedcheck = true
+		elif args[i] == "--verbose":
+			dbg_verbose = true
 		elif args[i] == "--bruit" and i + 1 < args.size():
 			dbg_bruit = float(args[i + 1])
 		elif args[i] == "--menace" and i + 1 < args.size():
@@ -114,6 +126,13 @@ func _parse_cmdline() -> void:
 
 
 func _build_world() -> void:
+	if dbg_lore:
+		# Les documents lus ne réapparaissent plus : ce qui est placé dépend
+		# donc du disque. Le test doit partir d'une ardoise vierge AVANT la
+		# construction, sinon il mesure l'historique de la machine.
+		DirAccess.remove_absolute(GameState.FICHIER_PROGRESSION)
+		GameState.documents_lus.clear()
+		GameState.souffle_appris = false
 	# l'état de reprise doit être connu AVANT de semer les fusibles
 	GameState.reset_run()
 
@@ -124,7 +143,9 @@ func _build_world() -> void:
 	level = preload("res://scripts/LevelBuilder.gd").new()
 	level.name = "Level"
 	add_child(level)
-	level.build()
+	if dbg_seed != 0:
+		GameState.graine = dbg_seed
+	level.build(GameState.graine)
 
 	player = Player.new()
 	player.name = "Player"
@@ -163,6 +184,10 @@ func _build_world() -> void:
 	_apply_debug()
 	if dbg_aitest > 0.0:
 		_run_ai_test()
+	if dbg_seedcheck:
+		_run_seed_check()
+	if dbg_seedreport:
+		_run_seed_report()
 	if dbg_rungame:
 		_run_objective_test()
 	if dbg_mousetest:
@@ -922,8 +947,8 @@ func _run_lore_test() -> void:
 	var places := {}
 	for d in level.document_spawns:
 		places[d["id"]] = d["pos"]
-	print("LORE  documents ecrits=%d  places dans le niveau=%d"
-			% [Lore.total(), places.size()])
+	print("LORE  graine=%d  documents ecrits=%d  places dans le niveau=%d"
+			% [GameState.graine, Lore.total(), places.size()])
 	var manquants := []
 	for d in Lore.DOCUMENTS:
 		if not places.has(d["id"]):
@@ -971,6 +996,15 @@ func _run_lore_test() -> void:
 		var c: String = level._cells.get(g, "")
 		if c in (d.get("lieu", []) as Array):
 			bien += 1
+	if bien < places.size():
+		for d in Lore.DOCUMENTS:
+			if not places.has(d["id"]):
+				continue
+			var gg: Vector2i = level.world_to_cell(places[d["id"]])
+			var cc: String = level._cells.get(gg, "")
+			if not (cc in (d.get("lieu", []) as Array)):
+				print("LORE    hors salle : %-22s voulait %s, a atterri en '%s'"
+						% [d["id"], str(d.get("lieu", [])), cc])
 	print("LORE  places dans une salle pertinente : %d / %d" % [bien, places.size()])
 	if bien < places.size() * 0.75:
 		print("LORE  ! trop de documents echouent hors de leur salle")
@@ -994,28 +1028,64 @@ func _run_lore_test() -> void:
 	for i in essais:
 		var pos: Vector3 = level.document_spawns[i]["pos"]
 		var postures := 0
-		# on balaie les postures plausibles d'un joueur qui s'approche : reculs
-		# de 0.8 à 2.0 m, regard de 30° à 50° vers le bas
-		for d in [0.8, 1.2, 1.6, 2.0]:
-			for pitch in [-0.9, -0.7, -0.5]:
-				# les PIEDS au niveau du sol : l'origine du joueur est à ses
-				# pieds et la caméra se place au-dessus. Ajouter une hauteur ici
-				# éloignait la caméra du sol au point que le rayon n'atteignait
-				# plus rien du tout.
-				player.global_position = Vector3(pos.x, pos.y, pos.z + d)
-				player.set_look(0.0, pitch)
-				player.ray.force_raycast_update()
-				var t := player.current_target()
-				if t != null and t.get_script() == preload("res://scripts/Document.gd"):
-					postures += 1
+		# On balaie les postures plausibles d'un joueur qui s'approche : QUATRE
+		# directions d'approche, reculs de 0.8 à 2.0 m, regard de 30° à 50° vers
+		# le bas. N'essayer qu'une direction jugeait inaccessible un document
+		# adossé au mur de ce côté-là, alors qu'on l'attrape très bien en
+		# faisant le tour.
+		for dir in [Vector3(0, 0, 1), Vector3(0, 0, -1), Vector3(1, 0, 0), Vector3(-1, 0, 0)]:
+			for d in [0.8, 1.2, 1.6, 2.0]:
+				for pitch in [-0.9, -0.7, -0.5]:
+					# les PIEDS au niveau du sol : l'origine du joueur est à ses
+					# pieds et la caméra se place au-dessus. Ajouter une hauteur
+					# ici éloignait la caméra du sol au point que le rayon
+					# n'atteignait plus rien du tout.
+					player.global_position = pos + dir * d
+					player.set_look(atan2(dir.x, dir.z), pitch)
+					player.ray.force_raycast_update()
+					var t := player.current_target()
+					if t != null and t.get_script() == preload("res://scripts/Document.gd"):
+						postures += 1
 		total_postures += postures
 		if postures >= 6:
 			vises += 1
-	print("LORE  attrapables confortablement : %d / %d  (%.1f postures valides sur 12 en moyenne)"
+		else:
+			var gg: Vector2i = level.world_to_cell(pos)
+			print("LORE    peu saisissable : %-22s %d/48 postures, en '%s' a (%.1f,%.1f)"
+					% [level.document_spawns[i]["id"], postures,
+					   level._cells.get(gg, "?"), pos.x, pos.z])
+	print("LORE  attrapables confortablement : %d / %d  (%.1f postures valides sur 48 en moyenne)"
 			% [vises, essais, float(total_postures) / maxi(essais, 1)])
 	if vises < essais:
 		print("LORE  ! des documents sont visibles mais penibles ou impossibles a ramasser")
 		ok = false
+
+	# --- 4 ter. un document lu ne doit plus reparaitre ---
+	var lus_test := 5
+	for i in lus_test:
+		GameState.lire_document(str(Lore.DOCUMENTS[i]["id"]))
+	level.document_spawns.clear()
+	level._placer_documents()
+	var restants: int = level.document_spawns.size()
+	var revenus := []
+	for e in level.document_spawns:
+		if GameState.a_lu(str(e["id"])):
+			revenus.append(e["id"])
+	print("LORE  apres %d documents lus : %d places (attendu %d)"
+			% [lus_test, restants, Lore.total() - lus_test])
+	if restants != Lore.total() - lus_test or not revenus.is_empty():
+		print("LORE  ! des documents deja lus reapparaissent : %s" % str(revenus))
+		ok = false
+	# tout lu : une descente sans document doit rester constructible
+	for d in Lore.DOCUMENTS:
+		GameState.lire_document(str(d["id"]))
+	level.document_spawns.clear()
+	level._placer_documents()
+	var apres_tout: int = level.document_spawns.size()
+	print("LORE  tout lu : %d documents places (attendu 0)" % apres_tout)
+	if apres_tout != 0:
+		ok = false
+	GameState.documents_lus.clear()
 
 	# --- 5. lecture : phase, enregistrement, fermeture ---
 	GameState.set_phase(GameState.Phase.JEU, true)
@@ -1103,6 +1173,120 @@ func _run_lore_test() -> void:
 	DirAccess.remove_absolute(GameState.FICHIER_PROGRESSION)
 	GameState.documents_lus.clear()
 	print("LORE RESULTAT : %s" % ("OK" if ok else "ECHEC"))
+	get_tree().quit()
+
+
+## Une descente tirée au sort est-elle TERMINABLE ?
+##
+## C'est la question que pose le hasard : un fusible derrière un meuble qui
+## cloisonne, un tableau électrique coupé du reste, et la partie devient
+## impossible — sans rien casser visiblement. On vérifie donc qu'un chemin
+## existe réellement, avec le même A* que la Veilleuse, du point de départ du
+## joueur vers chaque objectif.
+func _run_seed_check() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var pbs: Array[String] = []
+
+	if veilleuse == null:
+		pbs.append("pas de Veilleuse")
+	else:
+		# On passe par _nearest_free, comme la Veilleuse : une case peut porter
+		# l'emprise d'un meuble et compter pour bloquée alors qu'on s'y tient
+		# parfaitement — le joueur lui-même apparaît sur une telle case.
+		var depart: Vector2i = veilleuse._nearest_free(
+				level.world_to_grid(player.global_position))
+		var joignable := func(cible: Vector3, nom: String) -> void:
+			var g: Vector2i = veilleuse._nearest_free(level.world_to_grid(cible))
+			if dbg_verbose:
+				print("SEEDCHECK  diag %-28s pos=(%.1f,%.1f) brute=%s libre=%s bornes=%s solide=%s"
+						% [nom, cible.x, cible.z, level.world_to_grid(cible), g,
+						   veilleuse._astar.is_in_boundsv(g),
+						   veilleuse._astar.is_point_solid(g) if veilleuse._astar.is_in_boundsv(g) else "hors"])
+			if not veilleuse._astar.is_in_boundsv(g) or veilleuse._astar.is_point_solid(g):
+				pbs.append("%s hors navigation" % nom)
+				return
+			if g != depart and veilleuse._astar.get_id_path(depart, g).is_empty():
+				pbs.append("%s injoignable" % nom)
+
+		if level.fuse_spawns.size() != GameState.FUSES_REQUIRED:
+			pbs.append("%d fusibles au lieu de %d"
+					% [level.fuse_spawns.size(), GameState.FUSES_REQUIRED])
+		for i in level.fuse_spawns.size():
+			joignable.call(level.fuse_spawns[i], "fusible %d" % (i + 1))
+
+		# On vise les points d'ACCÈS, pas les objets : le tableau est encastré
+		# dans le mur et la grille du monte-charge est infranchissable — leurs
+		# positions propres sont solides par construction.
+		if get_tree().get_first_node_in_group("fusebox") == null:
+			pbs.append("tableau electrique absent")
+		else:
+			joignable.call(level.acces_tableau, "acces au tableau")
+
+		if get_tree().get_first_node_in_group("exit") == null:
+			pbs.append("monte-charge absent")
+		else:
+			joignable.call(level.acces_sortie, "acces au monte-charge")
+
+		joignable.call(veilleuse.global_position, "apparition de la Veilleuse")
+
+		for e in level.document_spawns:
+			joignable.call(e["pos"], "document %s" % e["id"])
+
+	var attendus := 0
+	for d in Lore.DOCUMENTS:
+		if not GameState.a_lu(str(d["id"])):
+			attendus += 1
+	if level.document_spawns.size() != attendus:
+		pbs.append("%d documents places au lieu de %d"
+				% [level.document_spawns.size(), attendus])
+	if level.battery_spawns.is_empty():
+		pbs.append("aucune pile")
+	if get_tree().get_nodes_in_group("hiding").is_empty():
+		pbs.append("aucune cachette")
+
+	if pbs.is_empty():
+		print("SEEDCHECK %d OK  (fusibles %d, docs %d, piles %d, cachettes %d)"
+				% [GameState.graine, level.fuse_spawns.size(),
+				   level.document_spawns.size(), level.battery_spawns.size(),
+				   get_tree().get_nodes_in_group("hiding").size()])
+	else:
+		print("SEEDCHECK %d ECHEC : %s" % [GameState.graine, " | ".join(pbs)])
+	get_tree().quit()
+
+
+## Empreinte d'une descente : de quoi comparer objectivement deux graines.
+func _run_seed_report() -> void:
+	await get_tree().process_frame
+	var f := []
+	for p in level.fuse_spawns:
+		f.append("(%.0f,%.0f)" % [p.x, p.z])
+	var d := []
+	for e in level.document_spawns:
+		d.append("(%.0f,%.0f)" % [(e["pos"] as Vector3).x, (e["pos"] as Vector3).z])
+	var props: int = level.get_node("Props").get_child_count() if level.has_node("Props") else -1
+	# Plan de ce qui reste navigable après élagage. Une salle entièrement
+	# amputée saute aux yeux ici, là où un simple total ne dit pas OÙ.
+	print("SEEDCHECK  plan (minuscule = amputee, . = vide) :")
+	for y in level.MAP.size():
+		var ligne := ""
+		for x in (level.MAP[y] as String).length():
+			var c: String = (level.MAP[y] as String)[x]
+			if c == ".":
+				ligne += "."
+				continue
+			var libres := 0
+			var g0: Vector2i = level.world_to_grid(level.world_of(x, y) - Vector3(1.9, 0, 1.9))
+			var g1: Vector2i = level.world_to_grid(level.world_of(x, y) + Vector3(1.9, 0, 1.9))
+			for gy in range(g0.y, g1.y + 1):
+				for gx in range(g0.x, g1.x + 1):
+					if not level.solid_grid.has(Vector2i(gx, gy)):
+						libres += 1
+			ligne += c if libres > 0 else c.to_lower()
+		print("    " + ligne)
+	print("SEED %d | fusibles %s | piles %d | docs %s | props %d | cases_libres %d | rondes %d"
+			% [dbg_seed, " ".join(f), level.battery_spawns.size(), " ".join(d),
+			   props, level.nav_reachable, level.patrol_points.size()])
 	get_tree().quit()
 
 

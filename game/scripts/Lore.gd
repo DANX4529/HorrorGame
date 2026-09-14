@@ -12,8 +12,12 @@ extends Node
 ##   chap    numéro de chapitre (voir CHAPITRES)
 ##   titre   ce qui s'affiche en tête du document et dans le journal
 ##   genre   "note", "dossier", "registre", "lettre", "carnet", "mur"
-##   lieu    lettre de salle où le document doit apparaître (voir LevelBuilder.MAP),
-##           "" = n'importe où. Une liste signifie « l'un de ces endroits ».
+##   lieu    lettres des salles où le document a un sens (voir LevelBuilder.MAP).
+##           Donner PLUSIEURS choix n'est pas une commodité : les salles sont
+##           petites et meublées, et le placeur impose un écart minimal entre
+##           deux documents. Enfermer plusieurs documents dans une seule salle
+##           les fait déborder au couloir, où ils perdent le sens que le lieu
+##           leur donnait. En viser deux ou trois est la bonne pratique.
 ##   texte   le corps du document
 
 const CHAPITRES := {
@@ -54,7 +58,7 @@ les nuits.
 Le directeur""",
 },
 {
-	"id": "registre_admissions", "chap": 1, "genre": "registre", "lieu": ["A"],
+	"id": "registre_admissions", "chap": 1, "genre": "registre", "lieu": ["A", "R"],
 	"titre": "Registre d'admission — page arrachée",
 	"texte": """ADMISSIONS — SERVICE DE VEILLE — 1959
 
@@ -206,7 +210,7 @@ Je veux bien le croire. Mais je vois bien qu'ils
 attendent mes pas, et que ce n'est pas de la peur.""",
 },
 {
-	"id": "consentement_marthe", "chap": 3, "genre": "dossier", "lieu": ["A"],
+	"id": "consentement_marthe", "chap": 3, "genre": "dossier", "lieu": ["A", "S"],
 	"titre": "Formulaire de consentement",
 	"texte": """CURE D'OBSCURITÉ — PHASE III
 CONSENTEMENT DU SUJET
@@ -228,7 +232,7 @@ Observation du praticien :
 Signature du sujet : M. Delaunay""",
 },
 {
-	"id": "carnet_marthe_3", "chap": 3, "genre": "carnet", "lieu": ["D", "E", "W"],
+	"id": "carnet_marthe_3", "chap": 3, "genre": "carnet", "lieu": ["D", "E", "W", "C"],
 	"titre": "Carnet de Marthe — III",
 	"texte": """Les lignes se chevauchent, écrites sans regarder.
 
@@ -267,7 +271,7 @@ Elle a déclaré qu'elle terminait sa ronde.
 Le monte-charge a été condamné à 11 h 40.""",
 },
 {
-	"id": "inscription_dortoir", "chap": 3, "genre": "mur", "lieu": ["D", "E", "W"],
+	"id": "inscription_dortoir", "chap": 3, "genre": "mur", "lieu": ["D", "E", "W", "S"],
 	"titre": "Gravé dans la peinture",
 	"texte": """Creusé à l'ongle, très profond, repassé
 un grand nombre de fois :

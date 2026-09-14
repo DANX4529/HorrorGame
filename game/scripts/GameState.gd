@@ -50,6 +50,17 @@ var souffle_appris := false
 ## que le joueur avait déjà.
 var documents_lus: Dictionary = {}
 
+## Graine de la descente en cours. Elle détermine tout ce que le sanatorium a
+## de variable : mobilier, fusibles, piles, lampes, documents.
+##
+## Elle doit rester STABLE pendant toute une partie. Un rechargement de scène
+## reconstruit le monde de zéro ; si la graine changeait à ce moment-là,
+## reprendre à un point de contrôle rebâtirait un autre sous-sol et les
+## fusibles déjà posés se retrouveraient ailleurs. Elle est donc tirée à
+## l'ouverture d'une descente, pas à la construction du niveau, et enregistrée
+## avec le point de reprise.
+var graine := 0
+
 const ACTIONS := {
 	"move_forward": [KEY_W, KEY_Z, KEY_UP],
 	"move_back":    [KEY_S, KEY_DOWN],
@@ -100,7 +111,17 @@ func set_phase(p: Phase, force := false) -> void:
 	phase_changed.emit(p)
 
 
+## Ouvre une nouvelle descente : nouvelle graine, point de reprise effacé.
+func nouvelle_descente() -> void:
+	graine = randi_range(1, 0x7FFFFFFF)
+	effacer_point_de_controle()
+
+
 func reset_run() -> void:
+	# filet de sécurité : lancement direct, outil de vérification, reprise d'une
+	# sauvegarde antérieure à l'existence des graines
+	if graine == 0:
+		graine = randi_range(1, 0x7FFFFFFF)
 	fuses_held = 0
 	fuses_installed = reprise_fusibles
 	# reprendre avec tous les fusibles posés veut dire que le courant était
@@ -128,6 +149,7 @@ func poser_point_de_controle() -> void:
 	c.set_value("reprise", "fusibles", fuses_installed)
 	c.set_value("reprise", "temps", time_survived)
 	c.set_value("reprise", "difficulte", Settings.difficulte)
+	c.set_value("reprise", "graine", graine)
 	c.save(FICHIER_PROGRESSION)
 
 
@@ -144,6 +166,8 @@ func reprendre() -> void:
 		return
 	reprise_fusibles = int(c.get_value("reprise", "fusibles", 0))
 	reprise_temps = float(c.get_value("reprise", "temps", 0.0))
+	# on retrouve le sous-sol exactement tel qu'on l'a quitté
+	graine = int(c.get_value("reprise", "graine", 0))
 	Settings.difficulte = clampi(int(c.get_value("reprise", "difficulte",
 			Settings.difficulte)), 0, 2)
 

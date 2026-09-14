@@ -65,13 +65,26 @@ var fuse_spawns: PackedVector3Array = []
 var battery_spawns: PackedVector3Array = []
 ## Documents du récit : [{ "id": String, "pos": Vector3 }, ...]
 var document_spawns: Array[Dictionary] = []
+
+## Points d'où l'on ATTEINT les deux objets critiques. Leurs positions propres
+## ne conviennent pas : le tableau est encastré dans le mur et son emprise est
+## volontairement marquée infranchissable, la grille du monte-charge de même.
+## Ce sont ces points-ci qui doivent rester joignables, et rien d'autre.
+var acces_tableau := Vector3.ZERO
+var acces_sortie := Vector3.ZERO
 var hiding_spots: Array[Node3D] = []
 var fusebox: Node3D = null
 var exit_gate: Node3D = null
 var _rng := RandomNumberGenerator.new()
 
 const NAV_RES := 0.5                 # pas de la grille de navigation, en mètres
+## Case du tableau électrique. _dress_technique n'équipe que celle-ci.
+const CELLULE_TABLEAU := Vector2i(10, 8)
 const AGENT_R := 0.42                # rayon d'encombrement de la Veilleuse
+## Demi-largeur de la voie gardée libre au centre de chaque couloir. Elle doit
+## rester franchement supérieure à AGENT_R, sinon un meuble posé juste à côté
+## réduit le passage à moins que l'encombrement de la Veilleuse.
+const VOIE_DEMI_LARGEUR := 0.80
 
 
 # ==========================================================================
@@ -117,10 +130,44 @@ func _parse_map() -> void:
 	for o in OPENINGS:
 		_openings[_edge_key(o[0], o[1], o[2])] = true
 		_door_zones.append(_door_zone(o[0], o[1], o[2]))
+	# Les abords du tableau électrique et du monte-charge sont protégés au même
+	# titre qu'une baie. Sans cela, sur certains tirages, caisses et gravats
+	# muraient l'un ou l'autre : la partie devenait alors impossible à terminer
+	# sans qu'aucune erreur ne se manifeste. Environ une graine sur vingt.
+	# Les cases sont DÉDUITES du plan, jamais recopiées en dur : le monte-charge
+	# est en (11,9) et non (10,9), et une constante fausse ne se serait vue
+	# nulle part — la protection se serait simplement appliquée à côté.
+	acces_tableau = world_of(CELLULE_TABLEAU.x, CELLULE_TABLEAU.y) + Vector3(1.30, 0, -1.05)
+	_door_zones.append({"pos": acces_tableau, "hx": 1.15, "hz": 1.15})
+	var m := _cellule_du_type("M")
+	if m != Vector2i(-1, -1):
+		acces_sortie = world_of(m.x, m.y) + Vector3(0, 0, 1.0)
+		_door_zones.append({"pos": acces_sortie, "hx": 1.35, "hz": 1.35})
+
+	# Une voie de passage est réservée au centre de chaque couloir.
+	#
+	# Sans elle, un lit d'hôpital (2.1 m de long, plus 0.42 m de marge de chaque
+	# côté) posé dans une case de 4 m pouvait condamner le couloir. Deux
+	# coupures suffisaient à trancher l'anneau : sur certaines graines la moitié
+	# du sous-sol devenait inatteignable — fusibles, monte-charge et tableau
+	# compris — et la partie était ingagnable sans qu'aucune erreur n'apparaisse.
+	# Une graine sur vingt au balayage.
+	for cell in _cells:
+		if _cells[cell] == "C":
+			_door_zones.append({"pos": world_of(cell.x, cell.y),
+					"hx": VOIE_DEMI_LARGEUR, "hz": VOIE_DEMI_LARGEUR})
 
 
 ## Rectangle qui doit rester libre de part et d'autre d'une baie, sans quoi
 ## un meuble posé au hasard peut murer une pièce entière.
+## Première case du plan portant cette lettre, (-1,-1) si aucune.
+func _cellule_du_type(lettre: String) -> Vector2i:
+	for cell in _cells:
+		if _cells[cell] == lettre:
+			return cell
+	return Vector2i(-1, -1)
+
+
 func _door_zone(x: int, y: int, dir: String) -> Dictionary:
 	var c := world_of(x, y)
 	var half_w := 1.05          # largeur de la baie + marge
@@ -411,7 +458,7 @@ func _dress_reserve(p: Node3D, o: Vector3, cell: Vector2i) -> void:
 
 
 func _dress_technique(p: Node3D, o: Vector3, cell: Vector2i) -> void:
-	if cell == Vector2i(10, 8):
+	if cell == CELLULE_TABLEAU:
 		fusebox = preload("res://scripts/FuseBox.gd").new()
 		p.add_child(fusebox)
 		fusebox.setup(_prop_scenes["fuse_box_body"], _prop_scenes["fuse_box_door"],
@@ -730,57 +777,103 @@ func _placer_documents() -> void:
 	var prises: Array[Vector2i] = []
 	var poses: Array[Vector3] = []
 	for d in Lore.DOCUMENTS:
+		# Un document déjà lu ne réapparaît pas : chaque descente ne dispose que
+		# ce qui reste à découvrir. Le sanatorium lâche son histoire par
+		# morceaux, et une mise à jour qui ajoute un chapitre redonne d'un coup
+		# une raison de redescendre. Le journal, lui, garde tout : on ne perd
+		# jamais l'accès à ce qu'on a lu.
+		if GameState.a_lu(str(d["id"])):
+			continue
 		var lieux: Array = d.get("lieu", [])
 		if lieux.is_empty():
 			lieux = ["C"]
-		var cell := _cellule_pour_document(par_type, lieux, prises)
-		if cell == Vector2i(-9999, -9999):
-			push_warning("Aucune salle pour le document %s" % d["id"])
-			continue
-		# _free_spot cherche dans un rayon de 1.6 m alors que les cases font 4 m :
-		# deux documents logés dans des cases voisines d'une même salle peuvent
-		# atterrir côte à côte, et la liasse du dessus masque celle du dessous.
-		var spot := _free_spot(world_of(cell.x, cell.y), 1.6, poses, DOC_ECART_MIN)
-		poses.append(spot)
-		if not _reachable(spot):
-			continue
-		prises.append(cell)
-		document_spawns.append({"id": str(d["id"]), "pos": spot})
+		# On essaie plusieurs cases, et non la première venue. Une salle exiguë
+		# peut n'offrir aucun emplacement à la fois dégagé et assez éloigné des
+		# documents déjà posés ; dans ce cas il vaut mieux changer de pièce que
+		# de coincer deux liasses l'une contre l'autre. Sur graine fixe le
+		# problème ne se voyait pas : il n'apparaît qu'en tirant au sort.
+		# Ordre des concessions, du moins coûteux au plus coûteux :
+		#   1. bonne salle, emplacement dégagé
+		#   2. bonne salle, emplacement contraint — sortir de la pièce coûte
+		#      plus cher que renoncer au dégagement : le lieu porte le sens
+		#   3. ailleurs, dégagé
+		#   4. ailleurs, n'importe où
+		#   5. écart minimal abandonné, en tout dernier ressort
+		# Sur graine fixe rien de tout cela ne se voyait : les salles disputées
+		# (quatre documents pour les quatre cases des archives) ne débordaient
+		# qu'avec certains tirages.
+		var prefs := _cellules_du_type(par_type, lieux, prises)
+		var autres := _cellules_restantes(par_type, prefs)
+		var pose := false
+		for essai in [[prefs, true], [prefs, false], [autres, true], [autres, false]]:
+			var cells: Array[Vector2i] = essai[0]
+			var deg: bool = essai[1]
+			for cell in cells:
+				var spot := _free_spot(world_of(cell.x, cell.y), 1.6, poses,
+						DOC_ECART_MIN, deg)
+				if not _reachable(spot) or not _loin_de(spot, poses, DOC_ECART_MIN):
+					continue
+				prises.append(cell)
+				poses.append(spot)
+				document_spawns.append({"id": str(d["id"]), "pos": spot})
+				pose = true
+				break
+			if pose:
+				break
+		if not pose:
+			# mieux vaut un document un peu trop proche qu'un morceau
+			# d'histoire absent de la partie
+			for cell in (prefs + autres):
+				var spot := _free_spot(world_of(cell.x, cell.y), 1.6, poses, 0.0, false)
+				if _reachable(spot):
+					prises.append(cell)
+					poses.append(spot)
+					document_spawns.append({"id": str(d["id"]), "pos": spot})
+					pose = true
+					break
+		if not pose:
+			push_warning("Aucun emplacement pour le document %s" % d["id"])
 
 
 const DOC_ECART_MIN := 1.6      ## mètres entre deux documents posés
 
 
-## Choisit une case pour un document.
+## Cases envisageables pour un document, de la plus pertinente à la moins.
 ##
 ## L'ordre compte : on préfère TOUJOURS une case encore libre, même d'un type
 ## moins pertinent, à une case déjà prise du bon type. Deux documents empilés
 ## au même endroit se cachent l'un l'autre — le joueur en ramasse un et ne
 ## saura jamais que l'autre était là. Un document dans une salle imparfaite
 ## reste lisible ; un document invisible est du texte perdu.
-func _cellule_pour_document(par_type: Dictionary, lieux: Array,
-		prises: Array[Vector2i]) -> Vector2i:
-	# 1. une salle du bon type, encore libre
-	for l in lieux:
+func _cellules_du_type(par_type: Dictionary, lieux: Array,
+		prises: Array[Vector2i]) -> Array[Vector2i]:
+	var v: Array[Vector2i] = []
+	for l in lieux:                       # d'abord les cases encore vierges
 		for cell in par_type.get(l, []):
 			if not (cell in prises):
-				return cell
-	# 2. un couloir libre — neutre, toujours traversé
+				v.append(cell)
+	# puis les autres cases de la même salle : une case fait 4 m, elle loge sans
+	# peine deux documents séparés de 1.6 m, et l'écart reste vérifié ensuite
+	for l in lieux:
+		for cell in par_type.get(l, []):
+			if not (cell in v):
+				v.append(cell)
+	return v
+
+
+## Tout le reste du sous-sol, couloirs d'abord : neutres et toujours traversés.
+func _cellules_restantes(par_type: Dictionary, deja: Array[Vector2i]) -> Array[Vector2i]:
+	var v: Array[Vector2i] = []
 	for cell in par_type.get("C", []):
-		if not (cell in prises):
-			return cell
-	# 3. n'importe quelle salle libre plutôt qu'un empilement
+		if not (cell in deja):
+			v.append(cell)
 	for l in par_type:
-		if l == "." or l == "M":
+		if l == "." or l == "M" or l == "C":
 			continue
 		for cell in par_type[l]:
-			if not (cell in prises):
-				return cell
-	# 4. en dernier recours seulement, on double une case du bon type
-	for l in lieux:
-		for cell in par_type.get(l, []):
-			return cell
-	return Vector2i(-9999, -9999)
+			if not (cell in deja) and not (cell in v):
+				v.append(cell)
+	return v
 
 
 func _reachable(w: Vector3) -> bool:
@@ -799,7 +892,7 @@ func _reachable(w: Vector3) -> bool:
 ## souvent que deux ou trois cases libres, et retirer dedans redonne
 ## indéfiniment les mêmes.
 func _free_spot(center: Vector3, radius := 1.6, evite: Array[Vector3] = [],
-		ecart := 0.0) -> Vector3:
+		ecart := 0.0, degage_requis := true) -> Vector3:
 	var replis: Array[Vector3] = []
 	for r in [radius, radius + 0.9, radius + 1.8]:
 		var found: Array[Vector3] = []
@@ -814,7 +907,13 @@ func _free_spot(center: Vector3, radius := 1.6, evite: Array[Vector3] = [],
 				if ecart > 0.0 and not _loin_de(w, evite, ecart):
 					replis.append(w)
 					continue
-				found.append(w)
+				# un emplacement dont les quatre voisins sont libres est en plein
+				# sol ; collé à un meuble, le rayon d'interaction du joueur est
+				# arrêté par le meuble depuis presque tous les angles
+				if _degage(g) or not degage_requis:
+					found.append(w)
+				else:
+					replis.append(w)
 		if not found.is_empty():
 			return found[_rng.randi() % found.size()]
 	# aucun emplacement ne respecte l'écart : mieux vaut un document un peu
@@ -822,6 +921,15 @@ func _free_spot(center: Vector3, radius := 1.6, evite: Array[Vector3] = [],
 	if not replis.is_empty():
 		return replis[_rng.randi() % replis.size()]
 	return center
+
+
+## Vrai si les quatre voisins immédiats de cette case sont libres.
+func _degage(g: Vector2i) -> bool:
+	for d: Vector2i in [Vector2i(1, 0), Vector2i(-1, 0), Vector2i(0, 1), Vector2i(0, -1)]:
+		var n: Vector2i = g + d
+		if solid_grid.has(n) or not nav_rect.has_point(n):
+			return false
+	return true
 
 
 func _loin_de(w: Vector3, points: Array[Vector3], ecart: float) -> bool:

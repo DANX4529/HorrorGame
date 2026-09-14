@@ -241,14 +241,10 @@ func _ecran_titre() -> void:
 	if GameState.a_un_point_de_controle():
 		_focus(_bouton("Reprendre la descente", func():
 			GameState.reprendre()
-			_relancer(), true))
-		_bouton("Recommencer depuis le début", func():
-			GameState.effacer_point_de_controle()
-			_relancer())
+			_relancer(false), true))
+		_bouton("Recommencer depuis le début", func(): _relancer())
 	else:
-		_focus(_bouton("Descendre", func():
-			GameState.effacer_point_de_controle()
-			_relancer(), true))
+		_focus(_bouton("Descendre", func(): _relancer(), true))
 	_bouton("Ce qu'on a retrouvé   (%d/%d)"
 			% [GameState.documents_trouves(), Lore.total()], func():
 		_retour = Ecran.TITRE
@@ -310,7 +306,8 @@ func _ecran_pause() -> void:
 	_bouton("Recommencer la partie", func(): _relancer())
 	_bouton("Retour au titre", func(): _retour_titre())
 	_espace(12)
-	_texte("Difficulté : %s" % Settings.nom_difficulte(), 13, SOURD)
+	_texte("Difficulté : %s     ·     Descente n° %d"
+			% [Settings.nom_difficulte(), GameState.graine], 13, SOURD)
 
 
 func _ecran_mort() -> void:
@@ -321,10 +318,8 @@ func _ecran_mort() -> void:
 	if GameState.a_un_point_de_controle():
 		_focus(_bouton("Reprendre au tableau électrique", func():
 			GameState.reprendre()
-			_relancer(), true))
-		_bouton("Recommencer depuis le début", func():
-			GameState.effacer_point_de_controle()
-			_relancer())
+			_relancer(false), true))
+		_bouton("Recommencer depuis le début", func(): _relancer())
 	else:
 		_focus(_bouton("Recommencer", func(): _relancer(), true))
 	_bouton("Retour au titre", func(): _retour_titre())
@@ -357,6 +352,10 @@ func _releve() -> void:
 		["Traques déclenchées", "%d" % int(s.get("chasses", 0.0))],
 		["Fois caché dans un casier", "%d" % int(s.get("cachettes", 0.0))],
 		["Halètements", "%d" % int(s.get("haletements", 0.0))],
+		["Documents retrouvés", "%d / %d" % [GameState.documents_trouves(), Lore.total()]],
+		# Chaque descente est tirée au sort : afficher sa graine permet de dire
+		# « celle-là était bonne », et de rejouer exactement le même sous-sol.
+		["Descente n°", str(GameState.graine)],
 	]
 	var g := GridContainer.new()
 	g.columns = 2
@@ -443,7 +442,12 @@ func _retour_titre() -> void:
 ## On ne peut RIEN faire après reload_current_scene() : ce noeud est détruit
 ## par le rechargement. L'intention est donc posée dans GameState, que Main
 ## relit à la fin de sa construction.
-func _relancer() -> void:
+func _relancer(nouvelle := true) -> void:
+	# Toute relance qui n'est pas une reprise ouvre une NOUVELLE descente :
+	# autre graine, donc autre sous-sol. Une reprise, elle, doit retrouver le
+	# sien intact — d'où le paramètre plutôt qu'un tirage implicite.
+	if nouvelle:
+		GameState.nouvelle_descente()
 	GameState.demarrer_en_jeu = true
 	GameState.set_phase(GameState.Phase.TITRE, true)
 	get_tree().reload_current_scene()
