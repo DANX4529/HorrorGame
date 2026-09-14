@@ -37,6 +37,7 @@ var dbg_nopost := false
 var dbg_ecran := ""
 var dbg_settings := false
 var dbg_lum := -1.0
+var dbg_menutest := false
 
 
 func _ready() -> void:
@@ -85,6 +86,8 @@ func _parse_cmdline() -> void:
 			dbg_ecran = args[i + 1]
 		elif args[i] == "--settingstest":
 			dbg_settings = true
+		elif args[i] == "--menutest":
+			dbg_menutest = true
 		elif args[i] == "--lum" and i + 1 < args.size():
 			dbg_lum = float(args[i + 1])
 
@@ -129,7 +132,12 @@ func _build_world() -> void:
 
 	if GameState.power_restored:
 		_rallumer()
-	GameState.set_phase(GameState.Phase.TITRE, true)
+	# le menu a demandé d'enchaîner : on saute l'écran-titre
+	if GameState.demarrer_en_jeu:
+		GameState.demarrer_en_jeu = false
+		GameState.set_phase(GameState.Phase.JEU, true)
+	else:
+		GameState.set_phase(GameState.Phase.TITRE, true)
 
 	_apply_debug()
 	if dbg_aitest > 0.0:
@@ -140,6 +148,8 @@ func _build_world() -> void:
 		_run_mouse_test()
 	if dbg_settings:
 		_run_settings_test()
+	if dbg_menutest or GameState.test_menu > 0:
+		_run_menu_test()
 	if shot_frames >= 0:
 		_do_shot()
 
@@ -560,6 +570,83 @@ func _run_settings_test() -> void:
 
 	Settings.remettre_defauts()
 	print("SETTINGS RESULTAT : %s" % ("OK" if ok else "ECHEC"))
+	get_tree().quit()
+
+
+## Cherche un bouton par son intitulé dans tout un sous-arbre.
+func _trouver_bouton(n: Node, texte: String) -> Button:
+	if n is Button and texte in (n as Button).text:
+		return n
+	for c in n.get_children():
+		var r := _trouver_bouton(c, texte)
+		if r:
+			return r
+	return null
+
+
+## Test de bout en bout du menu : on PRESSE réellement « Descendre » et on
+## vérifie que la partie démarre.
+##
+## Ce test traverse un rechargement de scène, qui détruit tous les noeuds. Son
+## avancement transite donc par GameState, seul survivant. C'est exactement le
+## piège qui avait laissé passer le bouton inopérant : les autres tests
+## court-circuitent le menu et n'empruntent jamais ce chemin.
+func _run_menu_test() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	if GameState.test_menu == 0:
+		GameState.test_menu = 1
+
+	if GameState.test_menu == 1:
+		var au_titre: bool = GameState.phase == GameState.Phase.TITRE
+		var b := _trouver_bouton(menu, "Descendre")
+		print("MENUTEST  etape 1 : ecran titre=%s  bouton 'Descendre' trouve=%s"
+				% [au_titre, b != null])
+		if b == null or not au_titre:
+			print("MENUTEST RESULTAT : ECHEC")
+			GameState.test_menu = 0
+			get_tree().quit()
+			return
+		GameState.test_menu = 2
+		b.pressed.emit()
+		return
+
+	# --- après un rechargement déclenché par un bouton ---
+	var ETAT := ["TITRE", "JEU", "PAUSE", "MORT", "VICTOIRE"]
+	var etape: int = GameState.test_menu
+	var jouable: bool = (GameState.phase == GameState.Phase.JEU
+			and is_instance_valid(player) and player.can_move
+			and level != null and level.fuse_spawns.size() > 0)
+	print("MENUTEST  etape %d : phase=%s  joueur=%s  peut_bouger=%s  fusibles=%d  menu visible=%s"
+			% [etape, ETAT[GameState.phase], is_instance_valid(player),
+			   player.can_move if is_instance_valid(player) else false,
+			   level.fuse_spawns.size() if level else -1,
+			   menu.visible if menu else "?"])
+	var ok: bool = jouable and (menu == null or not menu.visible)
+	if not ok:
+		print("MENUTEST RESULTAT : ECHEC")
+		GameState.test_menu = 0
+		get_tree().quit()
+		return
+
+	if etape == 2:
+		# on passe par l'écran de mort, chemin le plus emprunté par un joueur
+		print("MENUTEST  souris capturee=%s" % [Input.mouse_mode == Input.MOUSE_MODE_CAPTURED])
+		GameState.set_phase(GameState.Phase.MORT, true)
+		await get_tree().process_frame
+		var b := _trouver_bouton(menu, "Recommencer")
+		print("MENUTEST  ecran de mort : bouton 'Recommencer' trouve=%s" % [b != null])
+		if b == null:
+			print("MENUTEST RESULTAT : ECHEC")
+			GameState.test_menu = 0
+			get_tree().quit()
+			return
+		GameState.test_menu = 3
+		b.pressed.emit()
+		return
+
+	print("MENUTEST RESULTAT : OK")
+	GameState.test_menu = 0
 	get_tree().quit()
 
 

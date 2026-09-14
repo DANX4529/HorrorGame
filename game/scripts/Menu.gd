@@ -263,9 +263,7 @@ func _ecran_pause() -> void:
 		_retour = Ecran.PAUSE
 		_afficher(Ecran.OPTIONS))
 	_bouton("Recommencer la partie", func(): _relancer())
-	_bouton("Retour au titre", func():
-		GameState.set_phase(GameState.Phase.TITRE, true)
-		get_tree().reload_current_scene())
+	_bouton("Retour au titre", func(): _retour_titre())
 	_espace(12)
 	_texte("Difficulté : %s" % Settings.nom_difficulte(), 13, SOURD)
 
@@ -284,9 +282,7 @@ func _ecran_mort() -> void:
 			_relancer())
 	else:
 		_bouton("Recommencer", func(): _relancer(), true)
-	_bouton("Retour au titre", func():
-		GameState.set_phase(GameState.Phase.TITRE, true)
-		get_tree().reload_current_scene())
+	_bouton("Retour au titre", func(): _retour_titre())
 
 
 func _ecran_victoire() -> void:
@@ -301,9 +297,7 @@ func _ecran_victoire() -> void:
 	_releve()
 	_espace(14)
 	_bouton("Rejouer", func(): _relancer(), true)
-	_bouton("Retour au titre", func():
-		GameState.set_phase(GameState.Phase.TITRE, true)
-		get_tree().reload_current_scene())
+	_bouton("Retour au titre", func(): _retour_titre())
 
 
 ## Relevé de partie, commun à la mort et à la victoire.
@@ -340,11 +334,21 @@ func _releve() -> void:
 
 
 # ==========================================================================
-func _relancer() -> void:
+func _retour_titre() -> void:
+	GameState.demarrer_en_jeu = false
 	GameState.set_phase(GameState.Phase.TITRE, true)
 	get_tree().reload_current_scene()
-	await get_tree().process_frame
-	GameState.set_phase(GameState.Phase.JEU)
+
+
+## Reconstruit le monde et enchaîne sur la partie.
+##
+## On ne peut RIEN faire après reload_current_scene() : ce noeud est détruit
+## par le rechargement. L'intention est donc posée dans GameState, que Main
+## relit à la fin de sa construction.
+func _relancer() -> void:
+	GameState.demarrer_en_jeu = true
+	GameState.set_phase(GameState.Phase.TITRE, true)
+	get_tree().reload_current_scene()
 
 
 func _mmss(t: float) -> String:

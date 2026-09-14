@@ -29,6 +29,16 @@ const FICHIER_PROGRESSION := "user://progression.cfg"
 var reprise_fusibles := 0
 var reprise_temps := 0.0
 
+## Recharger la scène détruit tous les noeuds, menu compris. Une continuation
+## écrite après reload_current_scene() ne s'exécute donc jamais. L'intention
+## « enchaîner directement sur la partie » transite par cet autoload, qui lui
+## survit, et c'est Main qui la consomme une fois le monde reconstruit.
+var demarrer_en_jeu := false
+
+## Étape du test de menu (voir Main._run_menu_test). Comme le test traverse un
+## rechargement de scène, son avancement doit lui aussi vivre dans l'autoload.
+var test_menu := 0
+
 const ACTIONS := {
 	"move_forward": [KEY_W, KEY_Z, KEY_UP],
 	"move_back":    [KEY_S, KEY_DOWN],
