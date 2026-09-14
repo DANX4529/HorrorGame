@@ -20,6 +20,9 @@ var _msg_t := 0.0
 var _slats: Control
 var _t := 0.0
 var _dark := 0.0
+var _bruit := 0.0            ## impulsion de bruit en cours, 0..1
+var _menace := Vector2.ZERO  ## direction écran de la Veilleuse
+var _menace_f := 0.0         ## force du signal de menace, 0..1
 
 
 func _ready() -> void:
@@ -31,6 +34,7 @@ func _ready() -> void:
 	# les mouvements destinés à la vue. Les Control sont en MOUSE_FILTER_STOP
 	# par défaut, y compris le réticule placé au centre exact de l'écran.
 	_ignore_mouse(self)
+	NoiseBus.noise.connect(_on_noise)
 	GameState.message.connect(_on_message)
 	GameState.phase_changed.connect(_on_phase)
 	GameState.fuses_changed.connect(func(_a, _b): _refresh_objective())
@@ -169,6 +173,11 @@ func _build_ui() -> void:
 # --------------------------------------------------------------------------
 func _process(delta: float) -> void:
 	_t += delta
+	# l'impulsion de bruit retombe vite : c'est un événement, pas un état.
+	# Assez lentement toutefois pour qu'un pas de course reste perceptible
+	# entre deux foulées (0.34 s à l'allure de course).
+	_bruit = maxf(0.0, _bruit - delta * 3.4)
+	_update_menace(delta)
 	_update_post(delta)
 	if _msg_t > 0.0:
 		_msg_t -= delta
@@ -196,6 +205,9 @@ func _update_post(delta: float) -> void:
 	_mat.set_shader_parameter("souffle", souffle)
 	_mat.set_shader_parameter("noirceur", _dark)
 	_mat.set_shader_parameter("gamma", Settings.gamma())
+	_mat.set_shader_parameter("bruit", _bruit)
+	_mat.set_shader_parameter("menace", _menace)
+	_mat.set_shader_parameter("menace_force", _menace_f)
 
 
 func _update_gameplay_ui() -> void:
@@ -251,3 +263,44 @@ func _on_died() -> void:
 
 func _on_phase(p: int) -> void:
 	_ui.visible = (p == GameState.Phase.JEU)
+
+
+# --------------------------------------------------------------------------
+#  Lisibilité de la traque
+# --------------------------------------------------------------------------
+## Un bruit vient d'être émis quelque part : est-ce le joueur qui l'a fait ?
+##
+## On n'écoute pas le joueur directement mais le bus sonore, pour une raison
+## de fond : le joueur doit voir EXACTEMENT ce que la Veilleuse entend. Une
+## porte qu'il pousse, un casier qu'il referme, un fusible qu'il enfonce le
+## trahissent autant que ses pas, et tout cela passe déjà par ici.
+##
+## La respiration est écartée : elle est émise à chaque image, elle ferait une
+## impulsion permanente donc illisible. C'est la jauge de souffle qui la porte.
+func _on_noise(pos: Vector3, radius: float, kind: String) -> void:
+	if kind == "souffle" or player == null:
+		return
+	if pos.distance_to(player.global_position) > 2.5:
+		return          # un bruit lointain n'est pas le sien
+	_bruit = maxf(_bruit, NoiseBus.portee(radius))
+
+
+## Où est-elle, vue de l'écran ? -1 à gauche, +1 à droite.
+func _update_menace(delta: float) -> void:
+	var cible := 0.0
+	var v := get_tree().get_first_node_in_group("veilleuse")
+	if v and player and GameState.phase == GameState.Phase.JEU \
+			and v.has_method("is_hunting") and v.is_hunting():
+		var d := player.global_position.distance_to(v.global_position)
+		# le signal ne sert qu'à courte portée : au-delà, l'audio positionnel
+		# suffit et une indication permanente tuerait le doute.
+		cible = clampf(inverse_lerp(26.0, 6.0, d), 0.0, 1.0)
+		var local: Vector3 = player.cam.global_transform.basis.inverse() \
+				* (v.global_position - player.global_position)
+		var dir := Vector2(local.x, -local.y)
+		# derrière soi : l'ombre se referme des deux côtés, et c'est pire
+		if local.z > 0.0:
+			dir = Vector2(signf(local.x if absf(local.x) > 0.01 else 1.0), 0.0)
+			cible *= 1.15
+		_menace = dir.normalized() if dir.length() > 0.001 else Vector2.RIGHT
+	_menace_f = move_toward(_menace_f, clampf(cible, 0.0, 1.0), delta * (2.2 if cible > _menace_f else 1.1))

@@ -57,8 +57,7 @@ func interact(_who) -> void:
 	var n := GameState.install_fuses()
 	installed = GameState.fuses_installed
 	GameState.poser_point_de_controle()
-	Audio.play_3d("fuse_insert", global_position, -4.0)
-	NoiseBus.emit_kind(global_position, "fusible")
+	Audio.noise_3d("fuse_insert", global_position, "fusible", -4.0)
 	if installed >= GameState.FUSES_REQUIRED:
 		_power_up()
 	else:
@@ -68,8 +67,7 @@ func interact(_who) -> void:
 
 func _power_up() -> void:
 	GameState.power_restored = true
-	Audio.play_3d("power_on", global_position, 0.0)
-	NoiseBus.emit_kind(global_position, "courant")
+	Audio.noise_3d("power_on", global_position, "courant", 0.0)
 	GameState.say("LE COURANT EST REVENU.\nElle l'a entendu. Courez au monte-charge.", 5.0)
 	# la lumière revient partout : la fin de partie se joue à découvert
 	var racine := get_tree().current_scene

@@ -361,6 +361,40 @@ def stinger_detect():
 
 
 
+def stinger_lost():
+    """Sting de perte de trace : la dissonance se dénoue.
+
+    C'est le pendant exact de `stinger_detect`, et il manquait. Le sting de
+    détection empile une seconde mineure sale (146.8 / 155.6 Hz) qui « serre » ;
+    celui-ci part du même intervalle et le laisse GLISSER vers une quinte à vide
+    (146.8 / 220.0), puis s'éteint. L'oreille entend une résolution, pas une
+    nouvelle information : c'est le signal que l'on peut respirer.
+
+    Volontairement plus long et plus sombre que la détection — un relâchement
+    n'a pas à être saillant, il a à être reconnaissable.
+    """
+    dur = 2.6
+    n = int(dur * SR)
+    x = np.zeros(n, np.float32)
+    # la note tenue ne bouge pas : c'est l'autre qui se dénoue autour d'elle
+    for f0, f1, g in ((146.8, 146.8, 1.00),      # D3, pivot
+                      (155.6, 146.8, 0.72),      # la seconde mineure se résorbe
+                      (207.7, 220.0, 0.38),      # le triton glisse vers la quinte
+                      (311.1, 293.7, 0.20)):
+        env_f = S.env_curve(dur, [(0, f0), (0.45, f0 * 0.5 + f1 * 0.5), (1, f1)])
+        v = S.sine(dur, S.fit(env_f, n))
+        x += S.fit(v, n) * g
+    # enveloppe d'expiration : attaque molle, longue traîne
+    x *= S.env_curve(dur, [(0, 0), (0.10, 0.85), (0.34, 0.50), (1, 0)])
+    # un souffle d'air qui retombe, par-dessus
+    air = S.bandpass(S.pink(dur, 771), 620, 1.1)
+    air *= S.env_curve(dur, [(0, 0), (0.07, 0.42), (0.5, 0.14), (1, 0)])
+    x += S.fit(air, n) * 0.40
+    # on ferme les aigus : la menace s'éloigne
+    x = S.lowpass(x, 1750, 0.72)
+    return S.normalize(S.reverb(x, 0.95, 0.44, 61), 0.72)
+
+
 
 def drip(seed):
     """Goutte : éclaboussure large bande, puis résonance de la flaque."""
@@ -415,6 +449,7 @@ BANK = {
     "power_on":         power_on,
     "music_chase":      music_chase,
     "stinger_detect":   stinger_detect,
+    "stinger_lost":     stinger_lost,
 }
 for _i in range(4):
     BANK[f"step_lino_{_i+1}"] = (lambda i: (lambda: step_lino(i)))(_i)

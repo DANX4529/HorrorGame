@@ -183,7 +183,6 @@ func _on_noise(pos: Vector3, radius: float, kind: String) -> void:
 				_enter(Etat.CHASSE)
 			else:
 				_enter(Etat.INVESTIGATION)
-				Audio.play_2d("stinger_detect", -20.0)
 			_repath_t = 0.0
 		Etat.INVESTIGATION:
 			_target = pos
@@ -375,6 +374,7 @@ func _next_patrol() -> void:
 func _enter(e: Etat) -> void:
 	if etat == e:
 		return
+	var avant := etat
 	etat = e
 	state_changed.emit(e)
 	match e:
@@ -384,6 +384,30 @@ func _enter(e: Etat) -> void:
 			_patience = PATIENCE_CHASSE
 		Etat.INVESTIGATION:
 			_play("listen")
+			if avant == Etat.PATROUILLE:
+				_sting("stinger_detect", -17.0, -4.0)     # elle a entendu
+			else:
+				_sting("stinger_lost", -22.0, -9.0)       # elle perd la trace
+		Etat.PATROUILLE:
+			if avant == Etat.INVESTIGATION:
+				_sting("stinger_lost", -26.0, -13.0)      # elle renonce
+
+
+## Signal non positionné : ce n'est pas un son du monde, c'est ce que le
+## personnage ressent. Le volume suit la distance, si bien que le sting porte
+## lui-même une information — plus elle est près, plus il est alarmant.
+##
+## Ces trois transitions étaient jusqu'ici muettes ou presque (le sting de
+## détection sortait à -20 dB, sous le seuil de perception dans un casque au
+## milieu de l'ambiance). Or c'est exactement là que se joue le cycle de
+## tension : elle entend -> on se fige -> elle renonce -> on respire. Sans le
+## troisième temps, la partie n'était qu'une suite d'alertes sans retombée.
+func _sting(nom: String, db_loin: float, db_pres: float) -> void:
+	var d := 40.0
+	if is_instance_valid(player):
+		d = global_position.distance_to(player.global_position)
+	var t: float = clampf(inverse_lerp(30.0, 5.0, d), 0.0, 1.0)
+	Audio.play_2d(nom, lerpf(db_loin, db_pres, t))
 
 
 func _play(name: String) -> void:
@@ -398,13 +422,19 @@ func _play(name: String) -> void:
 func _update_audio(delta: float) -> void:
 	if _rasp == null:
 		return
+	# trois régimes franchement distincts : le joueur doit pouvoir dire, à
+	# l'oreille seule, si elle rôde, si elle écoute, ou si elle arrive.
 	var base := -16.0
-	if etat == Etat.CHASSE:
-		base = -6.0
-	elif etat == Etat.INVESTIGATION:
-		base = -12.0
+	var hauteur := 1.0
+	match etat:
+		Etat.CHASSE:
+			base = -5.0
+			hauteur = 1.20      # court, donc respire vite et haut
+		Etat.INVESTIGATION:
+			base = -13.0
+			hauteur = 0.87      # immobile, elle retient son propre souffle
 	_rasp.volume_db = lerpf(_rasp.volume_db, base, delta * 3.0)
-	_rasp.pitch_scale = 1.0 if etat != Etat.CHASSE else 1.18
+	_rasp.pitch_scale = lerpf(_rasp.pitch_scale, hauteur, delta * 2.5)
 
 
 func _check_catch() -> void:

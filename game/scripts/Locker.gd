@@ -47,8 +47,7 @@ func interact(who) -> void:
 		return
 	occupied = true
 	_target = ANGLE_OUVERT
-	Audio.play_3d("locker_open", _base_pos, -8.0)
-	NoiseBus.emit_kind(_base_pos, "casier")
+	Audio.noise_3d("locker_open", _base_pos, "casier", -8.0)
 	GameState.stat("cachettes")
 	who.enter_hiding(self)
 	await get_tree().create_timer(0.45).timeout
@@ -60,8 +59,7 @@ func interact(who) -> void:
 func release() -> void:
 	occupied = false
 	_target = ANGLE_OUVERT
-	Audio.play_3d("locker_open", _base_pos, -8.0)
-	NoiseBus.emit_kind(_base_pos, "casier")
+	Audio.noise_3d("locker_open", _base_pos, "casier", -8.0)
 	await get_tree().create_timer(0.6).timeout
 	_target = 0.0
 

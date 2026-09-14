@@ -24,7 +24,28 @@ const R := {
 	"courant":         40.0,
 }
 
+## Seuil et plafond de lisibilité, en mètres. En dessous du seuil, un bruit est
+## une affaire privée : ni l'écho ni l'image n'en rendent compte (un pas
+## accroupi porte 3 m). Au plafond, tout le couloir est au courant.
+const LISIBLE_SEUIL := 5.0
+const LISIBLE_PLAFOND := 22.0
+
 var last: Array = []            # historique court, utile au débogage / HUD
+
+
+## Traduit un rayon en « à quel point ce bruit est gros », de 0 à 1.
+##
+## Une seule définition pour tout le jeu : l'écho de la pièce et l'ouverture du
+## vignettage y puisent tous les deux. Deux barèmes séparés auraient fini par
+## diverger, et le joueur aurait vu une chose pendant qu'il en entendait une
+## autre — le pire retour possible sur une mécanique qu'il doit apprendre.
+##
+## La courbe est accélérée : l'écart entre marcher et courir doit sauter aux
+## sens, pas se diluer dans une rampe linéaire.
+func portee(radius: float) -> float:
+	if radius < LISIBLE_SEUIL:
+		return 0.0
+	return pow(clampf(inverse_lerp(LISIBLE_SEUIL, LISIBLE_PLAFOND, radius), 0.0, 1.0), 0.62)
 
 
 func emit_noise(pos: Vector3, radius: float, kind := "") -> void:

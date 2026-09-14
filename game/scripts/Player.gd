@@ -153,6 +153,7 @@ func _physics_process(delta: float) -> void:
 
 	_update_torch(delta)
 	_update_interaction()
+	_didacticiel_souffle()
 
 	if is_hidden:
 		_sprinting = false
@@ -237,10 +238,10 @@ func _update_steps(delta: float, sprinting: bool) -> void:
 	_step_t = 0.0
 	GameState.stat("distance", 0.72 if crouched else (1.55 if sprinting else 1.05))
 	var kind := "pas_accroupi" if crouched else ("pas_course" if sprinting else "pas_marche")
-	NoiseBus.emit_kind(global_position, kind)
 	var n := randi_range(1, 4)
 	var db := -20.0 if crouched else (-8.0 if sprinting else -13.0)
-	Audio.play_3d("step_%s_%d" % [_floor_kind, n], global_position, db,
+	# accroupi (3 m) le couloir ne répond pas ; en courant (18 m) il claque.
+	Audio.noise_3d("step_%s_%d" % [_floor_kind, n], global_position, kind, db,
 			randf_range(0.92, 1.08))
 	_bob = 1.0
 
@@ -302,6 +303,24 @@ func _set_breath_loop(name: String) -> void:
 	_breath_player.play()
 
 
+## Enseigne l'apnée au moment exact où elle sert.
+##
+## Pas au premier couloir, où la consigne serait abstraite et oubliée : à la
+## première fois qu'elle chasse ET qu'elle est proche. Le joueur a alors une
+## raison d'essayer, le résultat est immédiat, et la leçon tient en une fois.
+## Vu une seule fois dans la vie du joueur — l'indicateur est persisté.
+func _didacticiel_souffle() -> void:
+	if GameState.souffle_appris or not breath.can_hold():
+		return
+	var v := get_tree().get_first_node_in_group("veilleuse")
+	if v == null or not v.has_method("is_hunting") or not v.is_hunting():
+		return
+	if global_position.distance_to(v.global_position) > 14.0:
+		return
+	GameState.apprendre_souffle()
+	GameState.say("Elle vous entend respirer.\n[Ctrl] retenez votre souffle.", 5.0)
+
+
 func _fear_level() -> float:
 	var v := get_tree().get_first_node_in_group("veilleuse")
 	if v == null:
@@ -317,6 +336,7 @@ func _fear_level() -> float:
 
 func _on_gasp() -> void:
 	Audio.play_2d("gasp", -2.0, 1.0, "Souffle")
+	Audio.play_echo("gasp", global_position, NoiseBus.R["halètement"])
 	NoiseBus.emit_kind(global_position, "halètement")
 	GameState.stat("haletements")
 	_shake = 1.0

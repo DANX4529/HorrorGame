@@ -38,6 +38,9 @@ var dbg_ecran := ""
 var dbg_settings := false
 var dbg_lum := -1.0
 var dbg_menutest := false
+var dbg_lisibilite := false
+var dbg_bruit := -1.0
+var dbg_menace := -1.0
 
 
 func _ready() -> void:
@@ -88,6 +91,12 @@ func _parse_cmdline() -> void:
 			dbg_settings = true
 		elif args[i] == "--menutest":
 			dbg_menutest = true
+		elif args[i] == "--lisibilite":
+			dbg_lisibilite = true
+		elif args[i] == "--bruit" and i + 1 < args.size():
+			dbg_bruit = float(args[i + 1])
+		elif args[i] == "--menace" and i + 1 < args.size():
+			dbg_menace = float(args[i + 1])
 		elif args[i] == "--lum" and i + 1 < args.size():
 			dbg_lum = float(args[i + 1])
 
@@ -150,6 +159,8 @@ func _build_world() -> void:
 		_run_settings_test()
 	if dbg_menutest or GameState.test_menu > 0:
 		_run_menu_test()
+	if dbg_lisibilite:
+		_run_lisibilite_test()
 	if shot_frames >= 0:
 		_do_shot()
 
@@ -186,9 +197,17 @@ func _run_ai_test() -> void:
 		seen[veilleuse.etat] = true
 		if not noise_done and t > 7.0:
 			noise_done = true
-			# équivalent d'un halètement : audible à 22 m
-			NoiseBus.emit_kind(player.global_position, "halètement")
-			print("AITEST  t=%.1f  bruit fort emis a %.1f m" % [t, d])
+			# Le bruit doit porter jusqu'à elle, sinon le test ne teste rien.
+			# Il émettait un halètement (22 m) à un instant fixe : selon l'endroit
+			# de sa ronde, elle était souvent hors de portée (30 m et plus) et le
+			# test échouait sans qu'aucun code de perception soit en cause.
+			# On choisit donc le bruit en fonction de la distance réelle, et on
+			# journalise les deux pour que le résultat reste interprétable.
+			var kind := "halètement" if d < NoiseBus.R["halètement"] * 0.9 else "courant"
+			NoiseBus.emit_kind(player.global_position, kind)
+			print("AITEST  t=%.1f  bruit '%s' (%.0f m) emis a %.1f m  -> l'entend=%s"
+					% [t, kind, NoiseBus.R[kind], d,
+					   d <= NoiseBus.R[kind] * Settings.ouie()])
 		if fmod(t, 1.0) < 1.0 / 60.0:
 			print("AITEST  t=%4.1f  etat=%-13s d=%5.1f m  chemin=%d  parcouru=%.1f m"
 					% [t, ETAT[veilleuse.etat], d, veilleuse._path.size(), moved])
@@ -205,6 +224,16 @@ func _run_ai_test() -> void:
 
 
 func _apply_debug() -> void:
+	# fige les retours de lisibilité à une valeur donnée, le temps d'une
+	# capture : ils sont trop brefs pour être saisis autrement.
+	if dbg_bruit >= 0.0 or dbg_menace >= 0.0:
+		hud.set_process(false)
+		if dbg_bruit >= 0.0:
+			hud._bruit = dbg_bruit
+		if dbg_menace >= 0.0:
+			hud._menace_f = dbg_menace
+			hud._menace = Vector2.RIGHT
+		hud._update_post(0.016)
 	if dbg_light > 0.0:
 		var e: Environment = (get_child(0) as WorldEnvironment).environment
 		# la couleur d'ambiance du jeu est presque noire : pour inspecter la
@@ -648,6 +677,178 @@ func _run_menu_test() -> void:
 	print("MENUTEST RESULTAT : OK")
 	GameState.test_menu = 0
 	get_tree().quit()
+
+
+## Vérifie que la traque est LISIBLE — c'est-à-dire que le joueur reçoit
+## bien, par l'oreille et par l'image, l'information que le jeu prétend lui
+## donner sur sa mécanique centrale.
+##
+## Quatre affirmations, mesurées et non supposées :
+##   1. l'écho du couloir suit le rayon sonore, et se tait sous le seuil ;
+##   2. l'impulsion visuelle suit la même échelle que l'écho ;
+##   3. les trois transitions d'état émettent chacune leur signal ;
+##   4. la direction de la menace pointe du bon côté de l'écran.
+func _run_lisibilite_test() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var ok := true
+
+	# --- 1. l'écho suit le rayon ---
+	var echelle := [
+		["accroupi", NoiseBus.R["pas_accroupi"]],
+		["marche", NoiseBus.R["pas_marche"]],
+		["course", NoiseBus.R["pas_course"]],
+		["halètement", NoiseBus.R["halètement"]],
+	]
+	var dbs: Array[float] = []
+	for e in echelle:
+		var r: float = e[1]
+		var db: float = Audio.echo_db(r)
+		dbs.append(db)
+		print("LISIB  echo %-11s rayon %5.1f m -> %s"
+				% [e[0], r, ("SILENCE" if db == -INF else "%.1f dB" % db)])
+	if dbs[0] != -INF:
+		print("LISIB  ! un pas accroupi ne doit rien renvoyer")
+		ok = false
+	for i in range(1, dbs.size()):
+		if dbs[i] == -INF or dbs[i] <= dbs[i - 1]:
+			print("LISIB  ! l'echo ne croit pas avec le rayon")
+			ok = false
+	# l'écart marche/course doit sauter à l'oreille : au moins 6 dB
+	var saut: float = dbs[2] - dbs[1]
+	print("LISIB  ecart marche -> course = %.1f dB (attendu >= 6)" % saut)
+	if saut < 6.0:
+		ok = false
+
+	# --- 2. l'impulsion visuelle parle la même échelle ---
+	print("LISIB  portee : accroupi=%.2f  marche=%.2f  course=%.2f  halètement=%.2f"
+			% [NoiseBus.portee(NoiseBus.R["pas_accroupi"]),
+			   NoiseBus.portee(NoiseBus.R["pas_marche"]),
+			   NoiseBus.portee(NoiseBus.R["pas_course"]),
+			   NoiseBus.portee(NoiseBus.R["halètement"])])
+	if NoiseBus.portee(NoiseBus.R["pas_accroupi"]) != 0.0:
+		ok = false
+	# le HUD doit réagir à un vrai bruit émis près du joueur, et l'ignorer loin
+	GameState.set_phase(GameState.Phase.JEU, true)
+	await get_tree().process_frame
+	var mesures := {}
+	for cas in [["pres_course", player.global_position, "pas_course"],
+				["pres_accroupi", player.global_position, "pas_accroupi"],
+				["loin_course", player.global_position + Vector3(30, 0, 0), "pas_course"]]:
+		hud._bruit = 0.0
+		NoiseBus.emit_kind(cas[1], cas[2])
+		mesures[cas[0]] = hud._bruit
+	print("LISIB  impulsion HUD : course pres=%.2f  accroupi pres=%.2f  course loin=%.2f"
+			% [mesures["pres_course"], mesures["pres_accroupi"], mesures["loin_course"]])
+	if mesures["pres_course"] < 0.4 or mesures["pres_accroupi"] != 0.0 \
+			or mesures["loin_course"] != 0.0:
+		print("LISIB  ! l'impulsion visuelle ne discrimine pas correctement")
+		ok = false
+	# la respiration est continue : elle ne doit jamais declencher d'impulsion
+	hud._bruit = 0.0
+	NoiseBus.emit_noise(player.global_position, NoiseBus.R["halètement"], "souffle")
+	print("LISIB  impulsion sur respiration = %.2f (attendu 0.00)" % hud._bruit)
+	if hud._bruit != 0.0:
+		ok = false
+
+	# --- 3. les trois transitions signalent ---
+	if veilleuse == null:
+		print("LISIB  ! pas de Veilleuse")
+		ok = false
+	else:
+		veilleuse._spawn_grace = 0.0
+		var attendu := [
+			[Veilleuse.Etat.PATROUILLE, Veilleuse.Etat.INVESTIGATION, "stinger_detect"],
+			[Veilleuse.Etat.INVESTIGATION, Veilleuse.Etat.CHASSE, "entity_scream"],
+			[Veilleuse.Etat.CHASSE, Veilleuse.Etat.INVESTIGATION, "stinger_lost"],
+			[Veilleuse.Etat.INVESTIGATION, Veilleuse.Etat.PATROUILLE, "stinger_lost"],
+		]
+		for a in attendu:
+			veilleuse.etat = a[0]
+			Audio.dernier_sting = ""
+			veilleuse._enter(a[1])
+			var recu: String = Audio.dernier_sting
+			var bon: bool = recu == a[2]
+			print("LISIB  %-14s -> %-14s : signal '%s' %s"
+					% [_nom_etat(a[0]), _nom_etat(a[1]), recu, "OK" if bon else "ATTENDU " + a[2]])
+			if not bon:
+				ok = false
+
+	# --- 4. la direction de la menace ---
+	if veilleuse and player:
+		var cas := [["a droite", Vector3(6, 0, 0), 1.0], ["a gauche", Vector3(-6, 0, 0), -1.0]]
+		player.set_look(0.0, 0.0)
+		await get_tree().process_frame
+		for c in cas:
+			veilleuse.global_position = player.global_position + (c[1] as Vector3)
+			veilleuse.etat = Veilleuse.Etat.CHASSE
+			hud._menace_f = 0.0
+			for i in 30:
+				hud._update_menace(0.05)
+			var signe: float = signf(hud._menace.x)
+			var bon: bool = signe == c[2] and hud._menace_f > 0.3
+			print("LISIB  menace %-9s : x=%+.2f force=%.2f  %s"
+					% [c[0], hud._menace.x, hud._menace_f, "OK" if bon else "ECHEC"])
+			if not bon:
+				ok = false
+		# hors traque, aucun signal ne doit subsister
+		veilleuse.etat = Veilleuse.Etat.PATROUILLE
+		for i in 60:
+			hud._update_menace(0.05)
+		print("LISIB  hors traque : force=%.2f (attendu 0.00)" % hud._menace_f)
+		if hud._menace_f > 0.01:
+			ok = false
+
+	# --- 5. effacer un point de reprise ne doit PAS effacer les records ---
+	# Le test part d'un disque vierge : sans cela il héritait du record écrit
+	# par --rungame (une victoire scriptée en 0.4 s), et mesurait l'ordre
+	# d'exécution de la suite plutôt que le comportement visé.
+	DirAccess.remove_absolute(GameState.FICHIER_PROGRESSION)
+	GameState.souffle_appris = false
+	Settings.difficulte = 1
+	GameState.enregistrer_temps(412.0)
+	var avant_record := GameState.meilleur_temps()
+	GameState.fuses_installed = 2
+	GameState.poser_point_de_controle()
+	GameState.effacer_point_de_controle()
+	var apres_record := GameState.meilleur_temps()
+	print("LISIB  record avant=%.1f s  apres effacement du point de reprise=%.1f s"
+			% [avant_record, apres_record])
+	if absf(avant_record - 412.0) > 0.5 or absf(apres_record - 412.0) > 0.5:
+		print("LISIB  ! effacer le point de reprise detruit les meilleurs temps")
+		ok = false
+	if GameState.a_un_point_de_controle():
+		print("LISIB  ! le point de reprise survit a son effacement")
+		ok = false
+
+	# --- 6. le didacticiel de l'apnée : une fois, et une seule ---
+	GameState.souffle_appris = false
+	var vues := 0
+	for i in 3:
+		var avant := GameState.souffle_appris
+		GameState.apprendre_souffle()
+		if not avant and GameState.souffle_appris:
+			vues += 1
+	print("LISIB  didacticiel declenche %d fois sur 3 appels (attendu 1)" % vues)
+	if vues != 1:
+		ok = false
+	GameState.souffle_appris = false
+	GameState.apprendre_souffle()
+	var relu := ConfigFile.new()
+	relu.load(GameState.FICHIER_PROGRESSION)
+	var persiste: bool = bool(relu.get_value("didacticiel", "souffle", false))
+	print("LISIB  didacticiel persiste sur disque : %s" % persiste)
+	if not persiste:
+		ok = false
+	DirAccess.remove_absolute(GameState.FICHIER_PROGRESSION)
+	GameState.souffle_appris = false
+
+	print("LISIB RESULTAT : %s" % ("OK" if ok else "ECHEC"))
+	get_tree().quit()
+
+
+func _nom_etat(e: int) -> String:
+	return ["PATROUILLE", "INVESTIGATION", "CHASSE", "ATTAQUE"][e]
 
 
 func _do_shot() -> void:

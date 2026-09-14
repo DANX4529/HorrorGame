@@ -39,6 +39,11 @@ var demarrer_en_jeu := false
 ## rechargement de scène, son avancement doit lui aussi vivre dans l'autoload.
 var test_menu := 0
 
+## Le didacticiel de l'apnée a-t-il déjà été montré ? Chargé au démarrage
+## depuis le fichier de progression : un joueur ne doit le voir qu'une fois
+## dans sa vie, pas à chaque partie.
+var souffle_appris := false
+
 const ACTIONS := {
 	"move_forward": [KEY_W, KEY_Z, KEY_UP],
 	"move_back":    [KEY_S, KEY_DOWN],
@@ -56,6 +61,9 @@ const ACTIONS := {
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
+	var c := ConfigFile.new()
+	if c.load(FICHIER_PROGRESSION) == OK:
+		souffle_appris = bool(c.get_value("didacticiel", "souffle", false))
 	for name in ACTIONS:
 		if not InputMap.has_action(name):
 			InputMap.add_action(name)
@@ -102,6 +110,9 @@ func stat(cle: String, n := 1.0) -> void:
 # --------------------------------------------------------------------------
 func poser_point_de_controle() -> void:
 	var c := ConfigFile.new()
+	# charger d'abord : ConfigFile.save() n'écrit que ce qu'il a en mémoire, si
+	# bien qu'enregistrer sans relire écrasait records et didacticiel.
+	c.load(FICHIER_PROGRESSION)
 	c.set_value("reprise", "fusibles", fuses_installed)
 	c.set_value("reprise", "temps", time_survived)
 	c.set_value("reprise", "difficulte", Settings.difficulte)
@@ -125,10 +136,21 @@ func reprendre() -> void:
 			Settings.difficulte)), 0, 2)
 
 
+## Efface le point de reprise — et RIEN D'AUTRE.
+##
+## Cette fonction supprimait le fichier de progression entier. Comme les
+## meilleurs temps et le suivi du didacticiel y vivent aussi, chaque clic sur
+## « Descendre » détruisait les records du joueur : la fonction « meilleur
+## temps » ne pouvait donc jamais rien afficher d'une partie à l'autre.
 func effacer_point_de_controle() -> void:
 	reprise_fusibles = 0
 	reprise_temps = 0.0
-	DirAccess.remove_absolute(FICHIER_PROGRESSION)
+	var c := ConfigFile.new()
+	if c.load(FICHIER_PROGRESSION) != OK:
+		return          # rien d'enregistré : il n'y a rien à effacer
+	c.set_value("reprise", "fusibles", 0)
+	c.set_value("reprise", "temps", 0.0)
+	c.save(FICHIER_PROGRESSION)
 
 
 # --------------------------------------------------------------------------
@@ -174,3 +196,14 @@ func install_fuses() -> int:
 
 func say(txt: String, secs := 3.0) -> void:
 	message.emit(txt, secs)
+
+
+## Marque le didacticiel de l'apnée comme vu, définitivement.
+func apprendre_souffle() -> void:
+	if souffle_appris:
+		return
+	souffle_appris = true
+	var c := ConfigFile.new()
+	c.load(FICHIER_PROGRESSION)
+	c.set_value("didacticiel", "souffle", true)
+	c.save(FICHIER_PROGRESSION)

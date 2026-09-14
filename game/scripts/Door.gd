@@ -71,9 +71,8 @@ func interact(_who) -> void:
 	var now := Time.get_ticks_msec() / 1000.0
 	if now - _last_sound > 0.35:
 		_last_sound = now
-		Audio.play_3d("door_open" if open else "door_close", global_position, -6.0,
-				randf_range(0.94, 1.06) * (0.88 if metal else 1.0))
-		NoiseBus.emit_kind(global_position, "porte")
+		Audio.noise_3d("door_open" if open else "door_close", global_position,
+				"porte", -6.0, randf_range(0.94, 1.06) * (0.88 if metal else 1.0))
 
 
 func prompt() -> String:

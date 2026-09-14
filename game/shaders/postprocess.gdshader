@@ -14,6 +14,16 @@ uniform float desat : hint_range(0.0, 1.0) = 0.28;
 uniform float noirceur : hint_range(0.0, 1.0) = 0.0;   // fondu au noir
 uniform float souffle : hint_range(0.0, 1.0) = 1.0;    // 1 = plein, 0 = vide
 uniform float t = 0.0;
+// Impulsion de bruit : 0 au repos, 1 juste apres un bruit qui porte loin.
+// Un bruit qui porte revele brievement la taille du couloir — le vignettage
+// s'ouvre, puis se referme. C'est le seul retour du jeu sur sa mecanique
+// centrale, et il est entierement diegetique : pas de jauge, pas de chiffre.
+// Le joueur apprend la portee de ses pas en voyant la piece lui repondre.
+// Accroupi rien ne bouge ; en courant, le couloir s'ouvre en grand.
+uniform float bruit : hint_range(0.0, 1.0) = 0.0;
+// direction ecran de la Veilleuse pendant la traque, et force du signal
+uniform vec2 menace = vec2(0.0, 0.0);
+uniform float menace_force : hint_range(0.0, 1.0) = 0.0;
 // correction de luminosité choisie par le joueur : 1.0 = neutre
 uniform float gamma : hint_range(0.5, 2.0) = 1.0;
 
@@ -51,11 +61,37 @@ void fragment() {
 	col = clamp((col - 0.5) * 1.16 + 0.5, 0.0, 4.0);
 
 	// --- vignettage ---
-	float vig = 1.0 - smoothstep(0.16, 0.78, r2 * (1.0 + pulse * 12.0)) * vignette_force;
+	// `bruit` repousse le rayon du vignettage vers l'exterieur : la piece
+	// s'ouvre au lieu de s'eclaircir. C'est le meme levier que le battement
+	// cardiaque juste au-dessus, et il porte bien plus loin qu'un simple
+	// ajout de lumiere — une addition se noie dans des pixels deja noirs.
+	float r2v = r2 * (1.0 + pulse * 12.0) * (1.0 - bruit * 0.36);
+	float vig = 1.0 - smoothstep(0.16, 0.78, r2v) * vignette_force;
 	vig = clamp(vig, 0.0, 1.0);
 	// le manque d'air ferme le champ
 	vig *= 1.0 - (1.0 - souffle) * 0.45 * smoothstep(0.05, 0.55, r2);
+
 	col *= vig;
+
+	// Le recul du vignettage ne suffit pas seul : dans une piece non eclairee
+	// il n'ouvre que sur du noir, et le retour disparaitrait precisement la ou
+	// le joueur en a le plus besoin. Ce voile, lui, ne depend d'aucune lumiere
+	// presente — le bruit rend brievement l'espace perceptible meme dans le
+	// noir complet. Froid et tres faible : on suggere un volume, on n'eclaire pas.
+	col += bruit * 0.030 * smoothstep(0.05, 0.45, r2) * vec3(0.82, 0.88, 1.0);
+
+	// --- d'ou vient la menace ---
+	// Pendant la traque, l'ombre se referme du cote ou elle se trouve. Dans un
+	// couloir noir c'est souvent la seule information de direction dont dispose
+	// le joueur : sans elle, une chasse n'est qu'une mort tiree au sort.
+	// L'ecchymose bat au rythme du coeur, pour rester une sensation et non un
+	// element d'interface.
+	if (menace_force > 0.001) {
+		float vers = clamp(dot(normalize(c + vec2(1e-5)), menace), 0.0, 1.0);
+		float ecchymose = pow(vers, 2.4) * menace_force
+				* smoothstep(0.015, 0.26, r2) * (0.78 + 0.22 * beat);
+		col = mix(col, col * vec3(0.46, 0.26, 0.30), clamp(ecchymose, 0.0, 0.9));
+	}
 
 	// --- grain animé ---
 	float g = hash(uv * vec2(1920.0, 1080.0) + vec2(t * 71.3, t * 37.9));

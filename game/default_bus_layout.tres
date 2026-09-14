@@ -1,5 +1,19 @@
 [gd_resource type="AudioBusLayout" format=3]
 
+[sub_resource type="AudioEffectReverb" id="AudioEffectReverb_emp"]
+room_size = 0.88
+damping = 0.42
+spread = 1.0
+hipass = 0.08
+dry = 0.0
+wet = 1.0
+predelay_msec = 62.0
+predelay_feedback = 0.38
+
+[sub_resource type="AudioEffectLowPassFilter" id="AudioEffectLowPassFilter_emp"]
+cutoff_hz = 3200.0
+resonance = 0.12
+
 [resource]
 bus/0/volume_db = 0.0
 bus/1/name = &"SFX"
@@ -26,3 +40,13 @@ bus/4/mute = false
 bus/4/bypass_fx = false
 bus/4/volume_db = 0.0
 bus/4/send = &"Master"
+bus/5/name = &"Empreinte"
+bus/5/solo = false
+bus/5/mute = false
+bus/5/bypass_fx = false
+bus/5/volume_db = 0.0
+bus/5/send = &"Master"
+bus/5/effect/0/effect = SubResource("AudioEffectReverb_emp")
+bus/5/effect/0/enabled = true
+bus/5/effect/1/effect = SubResource("AudioEffectLowPassFilter_emp")
+bus/5/effect/1/enabled = true
