@@ -206,7 +206,32 @@ tremblement de caméra, consommation du souffle ×(1 + heart).
 
 ---
 
-## 9. Vérification
+## 9. Difficulté et confort
+
+Les paliers de difficulté agissent sur **ce qu'elle perçoit**, jamais sur ce
+que le joueur émet : le retour sonore reste identique à tous les niveaux, seule
+change la portée de son ouïe. Un joueur qui apprend le jeu en *Veilleur*
+apprend donc les mêmes réflexes qu'en *Pensionnaire*.
+
+| | Ouïe | Vitesse | Souffle | Lampe |
+|---|---|---|---|---|
+| Veilleur | ×0,72 | ×0,86 | ×0,78 | ×1,35 |
+| Patient | ×1,00 | ×1,00 | ×1,00 | ×1,00 |
+| Pensionnaire | ×1,24 | ×1,12 | ×1,26 | ×0,80 |
+
+Le nombre de fusibles ne bouge pas : la structure de la partie doit rester la
+même d'un palier à l'autre.
+
+**Point de contrôle** posé à chaque fusible installé. Dans une partie de quinze
+minutes, repartir de zéro à chaque mort décourage plus qu'il n'effraie.
+
+**Réglages** persistés (`user://respire.cfg`) : sensibilité, inversion de l'axe
+vertical, luminosité, et cinq volumes sur bus séparés — la respiration a son
+propre bus, puisqu'elle est censée dominer le mixage.
+
+---
+
+## 10. Vérification
 
 Le jeu se teste sans intervention humaine, en rendu logiciel sous Xvfb :
 

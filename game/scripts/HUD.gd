@@ -17,9 +17,6 @@ var _bat_lbl: Label
 var _prompt: Label
 var _msg: Label
 var _msg_t := 0.0
-var _center: Control
-var _big: Label
-var _sub: Label
 var _slats: Control
 var _t := 0.0
 var _dark := 0.0
@@ -168,28 +165,6 @@ func _build_ui() -> void:
 			side.offset_left = -160
 		_slats.add_child(side)
 
-	# --- écrans pleins (titre / mort / victoire / pause) ---
-	_center = Control.new()
-	_center.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_center.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	add_child(_center)
-	var veil := ColorRect.new()
-	veil.color = Color(0, 0, 0, 0.80)
-	veil.set_anchors_preset(Control.PRESET_FULL_RECT)
-	_center.add_child(veil)
-	_big = _lbl(_center, "", 54, Color(0.88, 0.85, 0.78))
-	_big.set_anchors_preset(Control.PRESET_CENTER, false)
-	_big.offset_left = -480; _big.offset_right = 480
-	_big.offset_top = -120; _big.offset_bottom = -46
-	_big.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_sub = _lbl(_center, "", 17, Color(0.74, 0.76, 0.70))
-	_sub.set_anchors_preset(Control.PRESET_CENTER, false)
-	_sub.offset_left = -430; _sub.offset_right = 430
-	_sub.offset_top = -28; _sub.offset_bottom = 200
-	_sub.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
-	_sub.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
-	_center.visible = false
-
 
 # --------------------------------------------------------------------------
 func _process(delta: float) -> void:
@@ -202,9 +177,6 @@ func _process(delta: float) -> void:
 			_msg.text = ""
 	if GameState.phase == GameState.Phase.JEU and player:
 		_update_gameplay_ui()
-	if GameState.phase in [GameState.Phase.TITRE, GameState.Phase.MORT, GameState.Phase.VICTOIRE]:
-		if Input.is_anything_pressed():
-			_advance_screen()
 
 
 func _update_post(delta: float) -> void:
@@ -223,6 +195,7 @@ func _update_post(delta: float) -> void:
 	_mat.set_shader_parameter("peur", peur)
 	_mat.set_shader_parameter("souffle", souffle)
 	_mat.set_shader_parameter("noirceur", _dark)
+	_mat.set_shader_parameter("gamma", Settings.gamma())
 
 
 func _update_gameplay_ui() -> void:
@@ -278,42 +251,3 @@ func _on_died() -> void:
 
 func _on_phase(p: int) -> void:
 	_ui.visible = (p == GameState.Phase.JEU)
-	match p:
-		GameState.Phase.TITRE:
-			_show("RESPIRE",
-				"Sanatorium du Mont-Cendre — 1961\n\n" +
-				"Quelque chose arpente les couloirs. C'est aveugle.\n" +
-				"Ça chasse au son.\n\n" +
-				"Et le bruit le plus fort dans un bâtiment vide,\n" +
-				"c'est votre propre respiration.\n\n" +
-				"ZQSD / WASD  déplacement      Maj  courir      C  s'accroupir\n" +
-				"Ctrl  RETENIR SON SOUFFLE      E  interagir      F  lampe\n\n" +
-				"— une touche pour descendre —")
-		GameState.Phase.MORT:
-			_show("ELLE VOUS A TROUVÉ",
-				"Vous avez tenu %d secondes.\n\n— une touche pour recommencer —"
-						% int(GameState.time_survived))
-		GameState.Phase.VICTOIRE:
-			_show("VOUS ÊTES SORTI",
-				"Le monte-charge remonte.\n\nTemps : %d s\n\n— une touche pour rejouer —"
-						% int(GameState.time_survived))
-		GameState.Phase.PAUSE:
-			_show("PAUSE", "— Échap pour reprendre —")
-		_:
-			_center.visible = false
-
-
-func _show(big: String, sub: String) -> void:
-	_big.text = big
-	_sub.text = sub
-	_center.visible = true
-
-
-func _advance_screen() -> void:
-	match GameState.phase:
-		GameState.Phase.TITRE:
-			GameState.set_phase(GameState.Phase.JEU)
-		GameState.Phase.MORT, GameState.Phase.VICTOIRE:
-			GameState.reset_run()
-			GameState.set_phase(GameState.Phase.TITRE)
-			get_tree().reload_current_scene()

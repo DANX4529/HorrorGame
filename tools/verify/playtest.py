@@ -46,10 +46,15 @@ if __name__ == "__main__":
         elif a[i] == "--title":
             i += 1                      # traité plus bas (désactive --autoplay)
         elif a[i].startswith("--"):
-            # tout autre drapeau est transmis tel quel au jeu : sans ça, une
-            # option inconnue serait silencieusement avalée et le test
-            # mesurerait autre chose que ce qu'on croit.
-            extra += [a[i]]; i += 1
+            # Tout autre drapeau est transmis tel quel au jeu, AVEC sa valeur
+            # si la suite n'est pas elle-même un drapeau. Sans ça une option
+            # inconnue — ou pire, sa valeur seule — serait silencieusement
+            # avalée, et le test mesurerait autre chose que ce qu'on croit.
+            extra.append(a[i])
+            i += 1
+            while i < len(a) and not a[i].startswith("--"):
+                extra.append(a[i])
+                i += 1
         else:
             i += 1
     out, bad, log = run(name, extra, frames, autoplay=("--title" not in a))

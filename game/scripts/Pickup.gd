@@ -37,6 +37,7 @@ func interact(who) -> void:
 		Audio.play_3d("pickup_fuse", global_position, -5.0)
 	else:
 		who.add_battery(35.0)
+		GameState.stat("piles")
 		Audio.play_3d("pickup_battery", global_position, -7.0)
 		GameState.say("Pile récupérée. +35 s de lampe.", 2.5)
 	NoiseBus.emit_kind(global_position, "fusible", 0.5)

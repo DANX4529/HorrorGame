@@ -64,6 +64,8 @@ func set_ajar() -> void:
 
 
 func interact(_who) -> void:
+	if not open:
+		GameState.stat("portes")
 	open = not open
 	_target = ANGLE_OUVERT if open else 0.0
 	var now := Time.get_ticks_msec() / 1000.0

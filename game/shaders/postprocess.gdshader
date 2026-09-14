@@ -14,6 +14,8 @@ uniform float desat : hint_range(0.0, 1.0) = 0.28;
 uniform float noirceur : hint_range(0.0, 1.0) = 0.0;   // fondu au noir
 uniform float souffle : hint_range(0.0, 1.0) = 1.0;    // 1 = plein, 0 = vide
 uniform float t = 0.0;
+// correction de luminosité choisie par le joueur : 1.0 = neutre
+uniform float gamma : hint_range(0.5, 2.0) = 1.0;
 
 float hash(vec2 p) {
 	return fract(sin(dot(p, vec2(41.31, 289.07))) * 43758.5453);
@@ -60,5 +62,7 @@ void fragment() {
 	col += (g - 0.5) * (grain + peur * 0.045);
 
 	col *= (1.0 - noirceur);
+	// appliquée en dernier, sur l'image finale
+	col = pow(max(col, vec3(0.0)), vec3(1.0 / max(gamma, 0.05)));
 	COLOR = vec4(col, 1.0);
 }

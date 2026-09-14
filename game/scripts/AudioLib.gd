@@ -13,6 +13,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	for i in POOL_3D:
 		var p := AudioStreamPlayer3D.new()
+		p.bus = "SFX"
 		p.max_distance = 30.0
 		p.unit_size = 3.0
 		p.attenuation_model = AudioStreamPlayer3D.ATTENUATION_INVERSE_DISTANCE
@@ -53,11 +54,12 @@ func play_3d(name: String, pos: Vector3, db := 0.0, pitch := 1.0) -> void:
 
 
 ## Son ponctuel non positionné (interface, respiration du joueur).
-func play_2d(name: String, db := 0.0, pitch := 1.0) -> AudioStreamPlayer:
+func play_2d(name: String, db := 0.0, pitch := 1.0, bus := "SFX") -> AudioStreamPlayer:
 	var s := stream(name)
 	if s == null:
 		return null
 	var p := AudioStreamPlayer.new()
+	p.bus = bus
 	p.stream = s
 	p.volume_db = db
 	p.pitch_scale = pitch
@@ -69,8 +71,9 @@ func play_2d(name: String, db := 0.0, pitch := 1.0) -> AudioStreamPlayer:
 
 
 ## Crée un lecteur bouclé persistant (ambiance, respiration, coeur).
-func make_loop(name: String, db := -12.0) -> AudioStreamPlayer:
+func make_loop(name: String, db := -12.0, bus := "SFX") -> AudioStreamPlayer:
 	var p := AudioStreamPlayer.new()
+	p.bus = bus
 	p.stream = stream(name, true)
 	p.volume_db = db
 	add_child(p)

@@ -15,10 +15,15 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+Settings="*res://scripts/Settings.gd"
 GameState="*res://scripts/GameState.gd"
 MaterialLib="*res://scripts/MaterialLib.gd"
 NoiseBus="*res://scripts/NoiseBus.gd"
 Audio="*res://scripts/AudioLib.gd"
+
+[audio]
+
+buses/default_bus_layout="res://default_bus_layout.tres"
 
 [display]
 

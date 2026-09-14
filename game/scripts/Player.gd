@@ -52,11 +52,12 @@ func _ready() -> void:
 	_build()
 	breath.gasped.connect(_on_gasp)
 	breath.state_changed.connect(_on_breath_state)
+	battery = BATTERIE_MAX * Settings.autonomie_lampe()
 	_set_breath_loop("breath_calm")
 	# on arrive lampe allumée : sans elle le sanatorium est illisible
 	torch_on = true
 	torch.visible = true
-	_heart_player = Audio.make_loop("heart_slow", -40.0)
+	_heart_player = Audio.make_loop("heart_slow", -40.0, "Souffle")
 	_heart_player.play()
 
 
@@ -130,8 +131,10 @@ func _input(e: InputEvent) -> void:
 	if GameState.phase != GameState.Phase.JEU:
 		return
 	if e is InputEventMouseMotion:
-		_yaw -= e.relative.x * SENSIBILITE
-		_pitch = clampf(_pitch - e.relative.y * SENSIBILITE, -1.45, 1.45)
+		var sens := Settings.sensibilite_rad()
+		var sy := -1.0 if Settings.inverser_y else 1.0
+		_yaw -= e.relative.x * sens
+		_pitch = clampf(_pitch - e.relative.y * sens * sy, -1.45, 1.45)
 		if is_hidden:
 			# dans un casier on ne tourne pas la tête à 360° : le champ est
 			# celui des ouïes d'aération.
@@ -232,6 +235,7 @@ func _update_steps(delta: float, sprinting: bool) -> void:
 	if _step_t < interval:
 		return
 	_step_t = 0.0
+	GameState.stat("distance", 0.72 if crouched else (1.55 if sprinting else 1.05))
 	var kind := "pas_accroupi" if crouched else ("pas_course" if sprinting else "pas_marche")
 	NoiseBus.emit_kind(global_position, kind)
 	var n := randi_range(1, 4)
@@ -292,7 +296,7 @@ func _set_breath_loop(name: String) -> void:
 		return
 	_breath_stream_name = name
 	if _breath_player == null:
-		_breath_player = Audio.make_loop(name, -15.0)
+		_breath_player = Audio.make_loop(name, -15.0, "Souffle")
 	else:
 		_breath_player.stream = Audio.stream(name, true)
 	_breath_player.play()
@@ -312,8 +316,9 @@ func _fear_level() -> float:
 
 
 func _on_gasp() -> void:
-	Audio.play_2d("gasp", -2.0)
+	Audio.play_2d("gasp", -2.0, 1.0, "Souffle")
 	NoiseBus.emit_kind(global_position, "halètement")
+	GameState.stat("haletements")
 	_shake = 1.0
 	GameState.say("Vous n'avez pas pu tenir.", 2.0)
 
@@ -347,7 +352,7 @@ func _update_torch(delta: float) -> void:
 
 
 func add_battery(secs: float) -> void:
-	battery = minf(BATTERIE_MAX, battery + secs)
+	battery = minf(BATTERIE_MAX * Settings.autonomie_lampe(), battery + secs)
 
 
 # --------------------------------------------------------------------------

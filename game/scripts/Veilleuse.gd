@@ -168,9 +168,12 @@ func _on_noise(pos: Vector3, radius: float, kind: String) -> void:
 	if GameState.phase != GameState.Phase.JEU or _spawn_grace > 0.0:
 		return
 	var d := global_position.distance_to(pos)
-	if d > radius:
+	# la difficulté agit sur la FINESSE DE SON OUÏE, pas sur le bruit émis :
+	# le joueur garde exactement le même retour sonore à tous les paliers.
+	if d > radius * Settings.ouie():
 		return
 	_last_heard_kind = kind
+	GameState.stat("detections")
 
 	match etat:
 		Etat.PATROUILLE:
@@ -260,7 +263,7 @@ func _unstick(delta: float) -> void:
 func _tick_patrouille(delta: float) -> void:
 	if _path_i >= _path.size():
 		_next_patrol()
-	_advance(delta, V_PATROUILLE)
+	_advance(delta, V_PATROUILLE * Settings.vitesse_entite())
 
 
 func _tick_investigation(delta: float) -> void:
@@ -275,7 +278,7 @@ func _tick_investigation(delta: float) -> void:
 			_enter(Etat.PATROUILLE)
 			_next_patrol()
 		return
-	_advance(delta, V_INVESTIGATION)
+	_advance(delta, V_INVESTIGATION * Settings.vitesse_entite())
 	if _patience <= 0.0:
 		_enter(Etat.PATROUILLE)
 		_next_patrol()
@@ -293,7 +296,7 @@ func _tick_chasse(delta: float) -> void:
 	if _repath_t <= 0.0:
 		_repath_t = REPATH * 0.6
 		_set_path_to(_target)
-	_advance(delta, V_CHASSE)
+	_advance(delta, V_CHASSE * Settings.vitesse_entite())
 	if _patience <= 0.0:
 		_enter(Etat.INVESTIGATION)
 		_patience = PATIENCE_INVESTIGATION * 0.5
@@ -377,6 +380,7 @@ func _enter(e: Etat) -> void:
 	match e:
 		Etat.CHASSE:
 			Audio.play_3d("entity_scream", global_position, -3.0)
+			GameState.stat("chasses")
 			_patience = PATIENCE_CHASSE
 		Etat.INVESTIGATION:
 			_play("listen")

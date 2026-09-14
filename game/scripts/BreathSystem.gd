@@ -42,19 +42,20 @@ func update(delta: float, wants_hold: bool, sprinting: bool, moving: bool,
 
 	var holding := wants_hold and hold_lock <= 0.0 and breath > 0.0
 
+	var diff := Settings.drain_souffle()
 	if holding:
-		breath -= delta * DRAIN_APNEE * (1.0 + heart * 0.30)
+		breath -= delta * DRAIN_APNEE * diff * (1.0 + heart * 0.30)
 		if breath <= 0.0:
 			breath = 0.14
 			hold_lock = BLOCAGE_APRES_HALETEMENT
 			_goto(State.HALETEMENT)
 			gasped.emit()
 	elif sprinting and moving:
-		breath -= delta * DRAIN_COURSE * (1.0 + heart * 0.22)
+		breath -= delta * DRAIN_COURSE * diff * (1.0 + heart * 0.22)
 	else:
 		var regen := REGEN_IMMOBILE if (not moving or crouched) else REGEN_MARCHE
 		# on récupère mal quand le coeur bat fort
-		breath += delta * regen * (1.0 - heart * 0.35)
+		breath += delta * regen / diff * (1.0 - heart * 0.35)
 
 	breath = clampf(breath, 0.0, 1.0)
 

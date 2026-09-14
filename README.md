@@ -67,6 +67,29 @@ Les modèles d'export Godot doivent être installés
 | F | Lampe torche |
 | Échap | Pause |
 
+### Confort
+
+Menu d'options accessible depuis le titre et depuis la pause : sensibilité de
+la souris, inversion de l'axe vertical, **luminosité** (le jeu est volontairement
+très sombre — l'écart entre les deux extrêmes est d'un facteur six), et cinq
+volumes séparés (général, effets, respiration et cœur, ambiance, musique).
+Les réglages sont conservés d'une partie à l'autre, y compris dans le navigateur.
+
+Trois difficultés, qui agissent sur la **finesse de son ouïe**, sa vitesse, la
+consommation de souffle et l'autonomie de la lampe. Elles ne touchent pas au
+bruit que vous émettez : votre retour sonore est le même à tous les paliers.
+
+| | Ouïe | Vitesse | Souffle | Lampe |
+|---|---|---|---|---|
+| Veilleur | ×0,72 | ×0,86 | ×0,78 | ×1,35 |
+| Patient | ×1,00 | ×1,00 | ×1,00 | ×1,00 |
+| Pensionnaire | ×1,24 | ×1,12 | ×1,26 | ×0,80 |
+
+Un **point de contrôle** est posé à chaque fusible installé : mourir ne renvoie
+pas au tout début. L'écran de fin donne le relevé de la partie (temps, distance,
+fois où elle vous a entendu, traques déclenchées, passages en casier,
+halètements) et retient votre meilleur temps par difficulté.
+
 ### But
 
 Le monte-charge du sous-sol est la seule sortie. Il lui manque **4 fusibles

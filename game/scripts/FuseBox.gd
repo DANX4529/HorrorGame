@@ -56,6 +56,7 @@ func interact(_who) -> void:
 		return
 	var n := GameState.install_fuses()
 	installed = GameState.fuses_installed
+	GameState.poser_point_de_controle()
 	Audio.play_3d("fuse_insert", global_position, -4.0)
 	NoiseBus.emit_kind(global_position, "fusible")
 	if installed >= GameState.FUSES_REQUIRED:
@@ -71,9 +72,9 @@ func _power_up() -> void:
 	NoiseBus.emit_kind(global_position, "courant")
 	GameState.say("LE COURANT EST REVENU.\nElle l'a entendu. Courez au monte-charge.", 5.0)
 	# la lumière revient partout : la fin de partie se joue à découvert
-	for l in get_tree().get_nodes_in_group("bulb"):
-		if l is OmniLight3D:
-			l.light_energy = l.get_meta("base", l.light_energy) * 2.1
+	var racine := get_tree().current_scene
+	if racine and racine.has_method("_rallumer"):
+		racine._rallumer()
 
 
 func prompt() -> String:

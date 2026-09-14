@@ -9,6 +9,7 @@ var level: Node3D
 var player: Player
 var veilleuse: Veilleuse
 var hud: CanvasLayer
+var menu: CanvasLayer
 var _amb: AudioStreamPlayer
 var _music: AudioStreamPlayer
 var _creak_t := 0.0
@@ -33,6 +34,9 @@ var dbg_rungame := false
 var dbg_hide := false
 var dbg_mousetest := false
 var dbg_nopost := false
+var dbg_ecran := ""
+var dbg_settings := false
+var dbg_lum := -1.0
 
 
 func _ready() -> void:
@@ -77,9 +81,18 @@ func _parse_cmdline() -> void:
 			dbg_mousetest = true
 		elif args[i] == "--nopost":
 			dbg_nopost = true
+		elif args[i] == "--ecran" and i + 1 < args.size():
+			dbg_ecran = args[i + 1]
+		elif args[i] == "--settingstest":
+			dbg_settings = true
+		elif args[i] == "--lum" and i + 1 < args.size():
+			dbg_lum = float(args[i + 1])
 
 
 func _build_world() -> void:
+	# l'état de reprise doit être connu AVANT de semer les fusibles
+	GameState.reset_run()
+
 	var wenv := WorldEnvironment.new()
 	wenv.environment = load("res://scenes/env.tres")
 	add_child(wenv)
@@ -109,7 +122,13 @@ func _build_world() -> void:
 	_music = Audio.make_loop("music_chase", -60.0)
 	_music.play()
 
-	GameState.reset_run()
+	menu = preload("res://scripts/Menu.gd").new()
+	menu.name = "Menu"
+	add_child(menu)
+	menu.bind(player)
+
+	if GameState.power_restored:
+		_rallumer()
 	GameState.set_phase(GameState.Phase.TITRE, true)
 
 	_apply_debug()
@@ -119,6 +138,8 @@ func _build_world() -> void:
 		_run_objective_test()
 	if dbg_mousetest:
 		_run_mouse_test()
+	if dbg_settings:
+		_run_settings_test()
 	if shot_frames >= 0:
 		_do_shot()
 
@@ -185,6 +206,15 @@ func _apply_debug() -> void:
 		player.global_position = dbg_tp + Vector3(0, 0.1, 0)
 	if dbg_yaw != INF:
 		player.set_look(dbg_yaw, dbg_pitch)
+	if dbg_lum >= 0.0:
+		Settings.luminosite = dbg_lum
+	if dbg_ecran != "" and menu:
+		match dbg_ecran:
+			"titre":    GameState.set_phase(GameState.Phase.TITRE, true)
+			"options":  menu._afficher(menu.Ecran.OPTIONS)
+			"pause":    GameState.set_phase(GameState.Phase.PAUSE, true)
+			"mort":     GameState.set_phase(GameState.Phase.MORT, true)
+			"victoire": GameState.set_phase(GameState.Phase.VICTOIRE, true)
 	if dbg_nopost:
 		# inspection de la géométrie : sans grain ni vignettage, le
 		# scintillement du tampon de profondeur devient évident.
@@ -232,16 +262,28 @@ func _apply_debug() -> void:
 		player.torch.visible = false
 
 
+## Remet les veilleuses à pleine puissance : appelé au retour du courant et
+## à la reprise d'une partie où il était déjà revenu.
+func _rallumer() -> void:
+	for l in get_tree().get_nodes_in_group("bulb"):
+		if l is OmniLight3D:
+			l.light_energy = float(l.get_meta("base", l.light_energy)) * 2.1
+
+
 func _spawn_pickups() -> void:
 	var holder := Node3D.new()
 	holder.name = "Pickups"
 	add_child(holder)
 	var fuse_scene: PackedScene = load("res://assets/models/props/fuse.glb")
 	var bat_scene: PackedScene = load("res://assets/models/props/battery.glb")
-	for p in level.fuse_spawns:
+	# à la reprise, les fusibles déjà posés ne réapparaissent pas
+	var deja: int = GameState.fuses_installed
+	for i in level.fuse_spawns.size():
+		if i < deja:
+			continue
 		var n := preload("res://scripts/Pickup.gd").new()
 		holder.add_child(n)
-		n.setup("fuse", fuse_scene, p)
+		n.setup("fuse", fuse_scene, level.fuse_spawns[i])
 	for p in level.battery_spawns:
 		var n := preload("res://scripts/Pickup.gd").new()
 		holder.add_child(n)
@@ -425,6 +467,99 @@ func _run_mouse_test() -> void:
 			% [y0, player._yaw, player._yaw - y0, p0, player._pitch, player._pitch - p0])
 	print("MOUSETEST RESULTAT : %s"
 			% ("OK" if absf(player._yaw - y0) > 0.01 and absf(player._pitch - p0) > 0.01 else "ECHEC"))
+	get_tree().quit()
+
+
+## Vérifie que les réglages agissent RÉELLEMENT sur le jeu, et pas seulement
+## sur l'affichage du menu.
+func _run_settings_test() -> void:
+	GameState.set_phase(GameState.Phase.JEU)
+	await get_tree().process_frame
+	var ok := true
+
+	# --- sensibilité de la souris ---
+	var mesures := []
+	for s in [0.1, 0.5, 1.0]:
+		Settings.sensibilite = s
+		player.set_look(0.0, 0.0)
+		await get_tree().process_frame
+		var ev := InputEventMouseMotion.new()
+		ev.relative = Vector2(100, 0)
+		ev.position = get_viewport().get_visible_rect().size * 0.5
+		Input.parse_input_event(ev)
+		await get_tree().process_frame
+		mesures.append(absf(player._yaw))
+	print("SETTINGS  sensibilite 0.1/0.5/1.0 -> rotation %.4f / %.4f / %.4f rad"
+			% [mesures[0], mesures[1], mesures[2]])
+	if not (mesures[0] < mesures[1] and mesures[1] < mesures[2]):
+		ok = false
+
+	# --- inversion de l'axe vertical ---
+	Settings.sensibilite = 0.5
+	var pitches := []
+	for inv in [false, true]:
+		Settings.inverser_y = inv
+		player.set_look(0.0, 0.0)
+		await get_tree().process_frame
+		var ev2 := InputEventMouseMotion.new()
+		ev2.relative = Vector2(0, 100)
+		ev2.position = get_viewport().get_visible_rect().size * 0.5
+		Input.parse_input_event(ev2)
+		await get_tree().process_frame
+		pitches.append(player._pitch)
+	print("SETTINGS  axe vertical normal %.4f / inverse %.4f" % [pitches[0], pitches[1]])
+	if signf(pitches[0]) == signf(pitches[1]) or absf(pitches[0]) < 0.01:
+		ok = false
+	Settings.inverser_y = false
+
+	# --- volumes : les bus doivent bouger ---
+	var lignes := []
+	for v in [0.0, 0.5, 1.0]:
+		Settings.vol_effets = v
+		Settings.appliquer()
+		var i := AudioServer.get_bus_index("SFX")
+		lignes.append("%.1f->%s" % [v, ("coupé" if AudioServer.is_bus_mute(i)
+				else "%.1f dB" % AudioServer.get_bus_volume_db(i))])
+	print("SETTINGS  bus SFX : " + " | ".join(lignes))
+	Settings.vol_effets = 1.0
+	Settings.appliquer()
+
+	# --- difficulté : ouïe, vitesse, souffle, lampe ---
+	for d in 3:
+		Settings.difficulte = d
+		print("SETTINGS  %-13s ouie x%.2f  vitesse x%.2f  souffle x%.2f  lampe x%.2f"
+				% [Settings.nom_difficulte(), Settings.ouie(), Settings.vitesse_entite(),
+				   Settings.drain_souffle(), Settings.autonomie_lampe()])
+	Settings.difficulte = 1
+
+	# --- persistance ---
+	Settings.luminosite = 0.77
+	Settings.sensibilite = 0.33
+	Settings.sauver()
+	Settings.luminosite = 0.0
+	Settings.sensibilite = 0.0
+	Settings.charger()
+	print("SETTINGS  persistance : luminosite %.2f  sensibilite %.2f"
+			% [Settings.luminosite, Settings.sensibilite])
+	if absf(Settings.luminosite - 0.77) > 0.01 or absf(Settings.sensibilite - 0.33) > 0.01:
+		ok = false
+
+	# --- point de contrôle ---
+	GameState.effacer_point_de_controle()
+	var avant := GameState.a_un_point_de_controle()
+	GameState.fuses_installed = 2
+	GameState.time_survived = 91.0
+	GameState.poser_point_de_controle()
+	GameState.reprise_fusibles = 0
+	GameState.reprendre()
+	print("SETTINGS  point de controle : avant=%s  apres reprise fusibles=%d temps=%.0f s"
+			% [avant, GameState.reprise_fusibles, GameState.reprise_temps])
+	if avant or GameState.reprise_fusibles != 2 or absf(GameState.reprise_temps - 91.0) > 0.5:
+		ok = false
+	GameState.effacer_point_de_controle()
+
+	Settings.remettre_defauts()
+	print("SETTINGS RESULTAT : %s" % ("OK" if ok else "ECHEC"))
 	get_tree().quit()
 
 
