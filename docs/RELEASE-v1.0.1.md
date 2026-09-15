@@ -1,4 +1,4 @@
-<!-- Corps de la release GitHub v1.0.0.
+<!-- Corps de la release GitHub v1.0.1.
      À coller tel quel dans le champ « description » du formulaire
      https://github.com/DANX4529/HorrorGame/releases/new -->
 
@@ -28,6 +28,10 @@ Jouable aussi dans le navigateur : https://danx4529.github.io/HorrorGame/
 **Chaque descente est différente.** Fusibles, mobilier, cachettes, lampes et documents sont tirés au sort. Le numéro de descente s'affiche en fin de partie : vous pouvez rejouer exactement le même sous-sol.
 
 **Trois difficultés**, qui agissent sur la finesse de son ouïe — jamais sur le bruit que vous émettez. Points de reprise, options complètes, relevé de fin de partie.
+
+## Nouveauté de la 1.0.1
+
+Le prologue **attend le joueur** au lieu d'enchaîner ses paragraphes tout seul. Chacun lit à son rythme : `Espace` affiche le paragraphe d'un coup pendant la frappe, puis passe au suivant ; `Échap` saute toute l'introduction.
 
 ## Commandes
 

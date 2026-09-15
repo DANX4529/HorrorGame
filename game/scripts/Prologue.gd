@@ -5,21 +5,31 @@ extends CanvasLayer
 ## Le monde est déjà construit derrière, mais l'arbre est figé : rien ne bouge,
 ## la Veilleuse ne patrouille pas, le souffle ne s'entame pas.
 ##
-## Le texte défile PAR TEMPS — un paragraphe frappé, tenu, puis effacé avant le
-## suivant. D'un bloc, il dépassait le bas de l'écran et recouvrait l'invite ;
-## par temps, il tient toujours, quelle que soit la longueur qu'on ajoutera.
-## C'est aussi la respiration qui convient à un prologue : une phrase à la fois.
+## Le texte défile PAR TEMPS — un paragraphe frappé, puis on ATTEND le joueur.
+## D'un bloc, il dépassait le bas de l'écran et recouvrait l'invite ; par temps,
+## il tient toujours, quelle que soit la longueur qu'on ajoutera.
 ##
-## TOUJOURS interrompable. Une descente est tirée au sort, donc on recommence
-## souvent ; un prologue qu'on ne peut pas passer deviendrait une punition au
-## troisième essai. L'invite apparaît dès la première seconde.
+## L'enchaînement est manuel, pas minuté : chacun lit à son rythme, et une
+## minuterie assez lente pour le lecteur le plus posé serait interminable pour
+## tous les autres. Trois usages d'une même touche, dans l'ordre où ils viennent
+## naturellement sous le doigt :
+##
+##   pendant la frappe  -> affiche le paragraphe d'un coup
+##   une fois affiché   -> passe au suivant
+##   au dernier         -> commence la partie
+##
+## Échap reste à part et saute TOUT. Il le faut : une descente est tirée au
+## sort, donc on recommence souvent, et onze validations à chaque essai
+## deviendraient une punition. Les deux invites sont visibles dès la première
+## seconde — on ne doit jamais se sentir prisonnier de l'introduction.
 
 const VITESSE := 54.0          ## caractères par seconde
-const TENUE := 0.78            ## temps de lecture une fois le temps frappé
 const FONDU := 0.28            ## effacement entre deux temps
-const FIN_ATTENTE := 1.1       ## noir final avant la première image jouable
+## Court délai avant que l'invite « continuer » ne réponde, pour qu'une touche
+## maintenue depuis la frappe ne fasse pas défiler deux temps d'un coup.
+const GARDE := 0.18
 
-enum Etat { FRAPPE, TENUE, FONDU, FIN }
+enum Etat { FRAPPE, ATTENTE, FONDU }
 
 var _texte: Label
 var _invite: Label
@@ -29,6 +39,7 @@ var _etat: Etat = Etat.FRAPPE
 var _montres := 0.0
 var _minuteur := 0.0
 var _t := 0.0
+var _garde := 0.0
 
 
 func _ready() -> void:
@@ -91,8 +102,9 @@ func _demarrer() -> void:
 	_montres = 0.0
 	_minuteur = 0.0
 	_t = 0.0
-	_invite.text = "[Espace] passer"
 	_invite.modulate.a = 0.0
+	_garde = 0.0
+	_maj_invite()
 	_texte.modulate.a = 1.0
 	_texte.text = _temps[0] if not _temps.is_empty() else ""
 	_texte.visible_characters = 0
@@ -103,49 +115,70 @@ func _process(delta: float) -> void:
 	if GameState.phase != GameState.Phase.PROLOGUE:
 		return
 	_t += delta
-	_invite.modulate.a = minf(1.0, _t * 1.4) * 0.8
+	_garde = maxf(0.0, _garde - delta)
+	var paru := minf(1.0, _t * 1.4)
+	# l'invite se renforce quand c'est au joueur de jouer
+	_invite.modulate.a = paru * (1.0 if _etat == Etat.ATTENTE else 0.62)
 
-	# « interact » couvre E et Espace, « pause » couvre Échap
-	if Input.is_action_just_pressed("interact") \
-			or Input.is_action_just_pressed("pause"):
+	# Échap saute tout ; « interact » (E ou Espace) agit selon l'état
+	if Input.is_action_just_pressed("pause"):
 		_terminer()
 		return
+	var avance := Input.is_action_just_pressed("interact")
 
 	match _etat:
 		Etat.FRAPPE:
+			if avance:
+				# on n'attend pas la fin de la frappe pour lire
+				_texte.visible_characters = _texte.text.length()
+				_montres = float(_texte.text.length())
+				_passer_en_attente()
+				return
 			_montres += delta * VITESSE
 			var n := mini(int(_montres), _texte.text.length())
 			if n > _texte.visible_characters:
 				_texte.visible_characters = n
 			if n >= _texte.text.length():
-				_etat = Etat.TENUE
-				_minuteur = TENUE
-		Etat.TENUE:
-			_minuteur -= delta
-			if _minuteur <= 0.0:
+				_passer_en_attente()
+		Etat.ATTENTE:
+			if avance and _garde <= 0.0:
+				if _i + 1 >= _temps.size():
+					_terminer()
+					return
 				_etat = Etat.FONDU
 				_minuteur = FONDU
+				_maj_invite()
 		Etat.FONDU:
 			_minuteur -= delta
 			_texte.modulate.a = clampf(_minuteur / FONDU, 0.0, 1.0)
 			if _minuteur <= 0.0:
 				_i += 1
-				if _i >= _temps.size():
-					_etat = Etat.FIN
-					_minuteur = FIN_ATTENTE
-					return
 				_texte.text = _temps[_i]
 				_texte.visible_characters = 0
 				_texte.modulate.a = 1.0
 				_montres = 0.0
 				_etat = Etat.FRAPPE
+				_maj_invite()
 				# une frappe discrète par temps, pas par caractère : au
 				# caractère, des centaines de déclenchements crépiteraient
 				Audio.play_2d("ui_move", -28.0, 0.92)
-		Etat.FIN:
-			_minuteur -= delta
-			if _minuteur <= 0.0:
-				_terminer()
+
+
+func _passer_en_attente() -> void:
+	_etat = Etat.ATTENTE
+	_garde = GARDE
+	_maj_invite()
+
+
+## L'invite dit ce que la touche fait MAINTENANT : « afficher » pendant la
+## frappe, « continuer » ensuite, « descendre » au dernier temps. Une invite
+## figée mentirait deux fois sur trois.
+func _maj_invite() -> void:
+	var dernier: bool = _i + 1 >= _temps.size()
+	var action := "afficher"
+	if _etat == Etat.ATTENTE:
+		action = "descendre" if dernier else "continuer"
+	_invite.text = "[Espace] %s          [Échap] passer l'introduction" % action
 
 
 func _terminer() -> void:
@@ -155,9 +188,10 @@ func _terminer() -> void:
 	GameState.set_phase(GameState.Phase.JEU, true)
 
 
-## Durée totale si on ne passe rien — sert au test.
-func duree_estimee() -> float:
-	var d := FIN_ATTENTE
+## Temps de FRAPPE cumulé, hors attentes. La durée réelle dépend du joueur :
+## c'est tout l'objet de l'enchaînement manuel. Sert au test.
+func duree_frappe() -> float:
+	var d := 0.0
 	for b in _temps:
-		d += (b as String).length() / VITESSE + TENUE + FONDU
+		d += (b as String).length() / VITESSE + FONDU
 	return d

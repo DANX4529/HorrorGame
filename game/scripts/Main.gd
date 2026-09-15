@@ -1225,8 +1225,8 @@ func _run_v1_test() -> void:
 	GameState.set_phase(GameState.Phase.PROLOGUE, true)
 	await get_tree().process_frame
 	var temps: PackedStringArray = prologue._temps
-	print("V1  prologue : %d temps, duree estimee %.1f s, monde fige=%s"
-			% [temps.size(), prologue.duree_estimee(), get_tree().paused])
+	print("V1  prologue : %d temps, frappe cumulee %.1f s, monde fige=%s"
+			% [temps.size(), prologue.duree_frappe(), get_tree().paused])
 	if temps.size() < 4 or not get_tree().paused:
 		ok = false
 	var trop_long := []
@@ -1242,6 +1242,46 @@ func _run_v1_test() -> void:
 	print("V1  prologue : %d temps trop longs pour l'ecran (attendu 0)" % trop_long.size())
 	if not trop_long.is_empty():
 		print("V1  ! %s" % str(trop_long).substr(0, 160))
+		ok = false
+
+	# --- 1 bis. l'enchaînement est MANUEL ---
+	# C'est le cœur de la correction : un paragraphe affiché doit attendre le
+	# joueur. S'il repartait tout seul au bout d'un délai, la lecture
+	# redeviendrait une course, et le défaut serait revenu sans bruit.
+	prologue._texte.visible_characters = prologue._texte.text.length()
+	prologue._montres = float(prologue._texte.text.length())
+	for f in 4:
+		await get_tree().process_frame
+	var en_attente: bool = prologue._etat == prologue.Etat.ATTENTE
+	var index_avant: int = prologue._i
+	# on laisse passer largement de quoi voir un enchaînement automatique
+	for f in 150:
+		await get_tree().process_frame
+	var reste: bool = prologue._i == index_avant \
+			and prologue._etat == prologue.Etat.ATTENTE
+	print("V1  paragraphe affiche : etat ATTENTE=%s, puis 150 images sans touche -> temps %d (etait %d), immobile=%s"
+			% [en_attente, prologue._i, index_avant, reste])
+	if not en_attente or not reste:
+		print("V1  ! un paragraphe avance sans le joueur")
+		ok = false
+
+	# l'invite doit dire ce que la touche fait maintenant
+	var invite: String = prologue._invite.text
+	print("V1  invite en attente : \"%s\"" % invite)
+	if not ("continuer" in invite or "descendre" in invite) \
+			or not ("passer" in invite):
+		print("V1  ! l'invite ne nomme pas les deux actions")
+		ok = false
+
+	# une pression fait bien avancer d'UN temps
+	Input.action_press("interact")
+	await get_tree().process_frame
+	Input.action_release("interact")
+	for f in 40:
+		await get_tree().process_frame
+	var avance: bool = prologue._i == index_avant + 1
+	print("V1  apres une pression : temps %d (attendu %d)" % [prologue._i, index_avant + 1])
+	if not avance:
 		ok = false
 
 	# --- 2. il rend la main, et on peut le passer ---
