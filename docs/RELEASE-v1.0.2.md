@@ -1,4 +1,4 @@
-<!-- Corps de la release GitHub v1.0.1.
+<!-- Corps de la release GitHub v1.0.2.
      À coller tel quel dans le champ « description » du formulaire
      https://github.com/DANX4529/HorrorGame/releases/new -->
 
@@ -17,7 +17,7 @@ Jeu d'horreur psychologique à la première personne. **Elle est aveugle. Elle c
 
 Windows peut afficher un avertissement SmartScreen : l'exécutable n'est pas signé numériquement. **Informations complémentaires → Exécuter quand même.**
 
-Jouable aussi dans le navigateur : https://danx4529.github.io/HorrorGame/
+Jouable aussi dans le navigateur, **y compris sur téléphone** : https://danx4529.github.io/HorrorGame/
 
 ## Ce qu'il y a dans cette version
 
@@ -28,6 +28,12 @@ Jouable aussi dans le navigateur : https://danx4529.github.io/HorrorGame/
 **Chaque descente est différente.** Fusibles, mobilier, cachettes, lampes et documents sont tirés au sort. Le numéro de descente s'affiche en fin de partie : vous pouvez rejouer exactement le même sous-sol.
 
 **Trois difficultés**, qui agissent sur la finesse de son ouïe — jamais sur le bruit que vous émettez. Points de reprise, options complètes, relevé de fin de partie.
+
+## Nouveautés de la 1.0.2
+
+**Jouable au doigt.** Le jeu reconnaît sur quoi vous jouez et change de commandes : manche de déplacement analogique à gauche (poussé à fond, on court), visée au glissement à droite, et des boutons à portée de pouce — dont un large **SOUFFLE** dans le coin, puisque c'est le geste d'urgence. Les menus prennent des cibles plus grandes, les invites cessent de nommer des touches, et la page demande le plein écran, bloque le zoom au double-tap et signale qu'il faut tourner l'appareil. À jouer en paysage.
+
+Un appareil hybride — portable à écran tactile, tablette au clavier — suit ce que vous faites : les commandes tactiles apparaissent au premier toucher et s'effacent dès que la souris ou le clavier reprend la main.
 
 ## Nouveauté de la 1.0.1
 

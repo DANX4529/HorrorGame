@@ -106,8 +106,10 @@ func _espace(h: int) -> void:
 func _bouton(t: String, appui: Callable, accent := false) -> Button:
 	var b := Button.new()
 	b.text = t
-	b.custom_minimum_size = Vector2(0, 38)
-	b.add_theme_font_size_override("font_size", 17)
+	# Au doigt, un bouton de 38 px se rate : les repères d'accessibilité
+	# tournent autour de 44 px, on prend 54 pour un jeu où l'on est pressé.
+	b.custom_minimum_size = Vector2(0, Tactile.hauteur_bouton())
+	b.add_theme_font_size_override("font_size", Tactile.taille_police(17))
 	b.add_theme_color_override("font_color", OR if accent else GRIS)
 	b.add_theme_color_override("font_hover_color", Color(1, 0.97, 0.90))
 	b.add_theme_color_override("font_focus_color", Color(1, 0.97, 0.90))
@@ -263,8 +265,12 @@ func _ecran_titre() -> void:
 	var mt := GameState.meilleur_temps()
 	if mt > 0.0:
 		_texte("Meilleur temps en %s : %s" % [Settings.nom_difficulte(), _mmss(mt)], 13, SOURD)
-	_texte("ZQSD / WASD  se déplacer      Maj  courir      C  s'accroupir\n"
-		+ "Ctrl  RETENIR SON SOUFFLE      E  interagir      F  lampe      Échap  pause",
+	_texte(Tactile.libelle(
+			"ZQSD / WASD  se déplacer      Maj  courir      C  s'accroupir\n"
+			+ "Ctrl  RETENIR SON SOUFFLE      E  interagir      F  lampe      Échap  pause",
+			"Manche à gauche  se déplacer  ·  pousser à fond  courir\n"
+			+ "Glisser à droite  regarder  ·  BAISSÉ  s'accroupir\n"
+			+ "SOUFFLE  retenir son souffle  ·  AGIR  interagir  ·  II  pause"),
 		13, SOURD, 4)
 
 

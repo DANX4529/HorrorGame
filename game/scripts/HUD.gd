@@ -36,6 +36,7 @@ func _ready() -> void:
 	# par défaut, y compris le réticule placé au centre exact de l'écran.
 	_ignore_mouse(self)
 	_build_feuille()
+	Tactile.mode_change.connect(func(_a): _placer_souffle())
 	NoiseBus.noise.connect(_on_noise)
 	GameState.document_ouvert.connect(_on_document)
 	GameState.message.connect(_on_message)
@@ -102,9 +103,7 @@ func _build_ui() -> void:
 	# --- jauge de souffle, en bas au centre ---
 	_breath_bg = ColorRect.new()
 	_breath_bg.color = Color(0.05, 0.05, 0.06, 0.72)
-	_breath_bg.set_anchors_preset(Control.PRESET_CENTER_BOTTOM, false)
-	_breath_bg.offset_left = -170; _breath_bg.offset_right = 170
-	_breath_bg.offset_top = -64; _breath_bg.offset_bottom = -55
+	_placer_souffle()
 	_ui.add_child(_breath_bg)
 
 	_breath_fill = ColorRect.new()
@@ -114,9 +113,7 @@ func _build_ui() -> void:
 	_breath_bg.add_child(_breath_fill)
 
 	_breath_lbl = _lbl(_ui, "", 15, Color(0.92, 0.88, 0.78))
-	_breath_lbl.set_anchors_preset(Control.PRESET_CENTER_BOTTOM, false)
-	_breath_lbl.offset_left = -170; _breath_lbl.offset_right = 170
-	_breath_lbl.offset_top = -90; _breath_lbl.offset_bottom = -68
+	_placer_souffle()
 	_breath_lbl.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 
 	# --- objectif, en haut à gauche ---
@@ -228,7 +225,9 @@ func _update_gameplay_ui() -> void:
 
 	var txt := b.label()
 	if txt == "" and b.can_hold():
-		txt = "[Ctrl] retenir son souffle"
+		# en tactile, le bouton EST l'invite : la répéter en texte n'apprendrait
+		# rien et mangerait de la place
+		txt = "" if Tactile.actif else "[Ctrl] retenir son souffle"
 	elif not b.can_hold() and b.state != BreathSystem.State.HALETEMENT:
 		txt = "impossible de retenir  (%.1f s)" % b.hold_lock
 	_breath_lbl.text = txt
@@ -237,9 +236,9 @@ func _update_gameplay_ui() -> void:
 
 	var tgt := player.current_target()
 	if player.is_hidden:
-		_prompt.text = "[E] Sortir"
+		_prompt.text = Tactile.libelle("[E] Sortir", "AGIR  ▸  Sortir")
 	elif tgt != null and tgt.has_method("prompt"):
-		_prompt.text = "[E]  " + tgt.prompt()
+		_prompt.text = Tactile.libelle("[E]  ", "AGIR  ▸  ") + tgt.prompt()
 	else:
 		_prompt.text = ""
 
@@ -394,6 +393,32 @@ func _on_document(id: String) -> void:
 	var col := page.get_child(0)
 	(col.get_node("Titre") as Label).text = str(d.get("titre", ""))
 	(col.get_node("Corps") as Label).text = str(d.get("texte", ""))
-	(col.get_node("Pied") as Label).text = "%s  ·  %d / %d documents  ·  [E] refermer" % [
+	(col.get_node("Pied") as Label).text = "%s  ·  %d / %d documents  ·  " + Tactile.libelle("[E] refermer", "toucher pour refermer") % [
 			Lore.CHAPITRES.get(int(d.get("chap", 1)), ""),
 			GameState.documents_trouves(), Lore.total()]
+
+
+## Place la jauge de souffle selon le mode d'entrée.
+##
+## En tactile elle remonte en haut : le bas de l'écran appartient aux pouces et
+## les boutons la recouvraient. Recalculée à chaque changement de mode, parce
+## qu'un appareil hybride peut basculer en pleine partie — la disposer une
+## seule fois au démarrage laissait la jauge sous les boutons.
+func _placer_souffle() -> void:
+	if _breath_bg == null:
+		return
+	if Tactile.actif:
+		_breath_bg.set_anchors_preset(Control.PRESET_CENTER_TOP, false)
+		_breath_bg.offset_top = 30; _breath_bg.offset_bottom = 39
+		if _breath_lbl:
+			_breath_lbl.set_anchors_preset(Control.PRESET_CENTER_TOP, false)
+			_breath_lbl.offset_top = 46; _breath_lbl.offset_bottom = 68
+	else:
+		_breath_bg.set_anchors_preset(Control.PRESET_CENTER_BOTTOM, false)
+		_breath_bg.offset_top = -64; _breath_bg.offset_bottom = -55
+		if _breath_lbl:
+			_breath_lbl.set_anchors_preset(Control.PRESET_CENTER_BOTTOM, false)
+			_breath_lbl.offset_top = -90; _breath_lbl.offset_bottom = -68
+	_breath_bg.offset_left = -170; _breath_bg.offset_right = 170
+	if _breath_lbl:
+		_breath_lbl.offset_left = -170; _breath_lbl.offset_right = 170

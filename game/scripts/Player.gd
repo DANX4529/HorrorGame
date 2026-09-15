@@ -131,16 +131,33 @@ func _input(e: InputEvent) -> void:
 	if GameState.phase != GameState.Phase.JEU:
 		return
 	if e is InputEventMouseMotion:
-		var sens := Settings.sensibilite_rad()
-		var sy := -1.0 if Settings.inverser_y else 1.0
-		_yaw -= e.relative.x * sens
-		_pitch = clampf(_pitch - e.relative.y * sens * sy, -1.45, 1.45)
-		if is_hidden:
-			# dans un casier on ne tourne pas la tête à 360° : le champ est
-			# celui des ouïes d'aération.
-			var d := wrapf(_yaw - _hide_yaw, -PI, PI)
-			_yaw = _hide_yaw + clampf(d, -0.72, 0.72)
-			_pitch = clampf(_pitch, -0.55, 0.55)
+		# En tactile, la visée vient du glissement d'un doigt, pas d'ici. Godot
+		# émule aussi une souris à partir des touchers : sans cette garde, un
+		# glissement pivotait la vue DEUX fois, et pousser le manche de
+		# déplacement faisait tourner la tête en plus d'avancer.
+		if Tactile.actif:
+			return
+		tourner((e as InputEventMouseMotion).relative)
+
+
+## Fait pivoter la vue d'un déplacement exprimé en pixels.
+##
+## Extrait de _input pour que le glissement d'un doigt emprunte EXACTEMENT le
+## même chemin que la souris : même sensibilité, même inversion d'axe, mêmes
+## butées, et la même restriction de champ quand on est dans un casier. Deux
+## implémentations parallèles auraient fini par diverger, et le joueur mobile
+## aurait hérité d'une visée aux règles subtilement différentes.
+func tourner(delta: Vector2) -> void:
+	var sens := Settings.sensibilite_rad()
+	var sy := -1.0 if Settings.inverser_y else 1.0
+	_yaw -= delta.x * sens
+	_pitch = clampf(_pitch - delta.y * sens * sy, -1.45, 1.45)
+	if is_hidden:
+		# dans un casier on ne tourne pas la tête à 360° : le champ est
+		# celui des ouïes d'aération.
+		var d := wrapf(_yaw - _hide_yaw, -PI, PI)
+		_yaw = _hide_yaw + clampf(d, -0.72, 0.72)
+		_pitch = clampf(_pitch, -0.55, 0.55)
 
 
 func _physics_process(delta: float) -> void:

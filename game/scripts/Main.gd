@@ -10,6 +10,7 @@ var player: Player
 var veilleuse: Veilleuse
 var hud: CanvasLayer
 var prologue: CanvasLayer
+var tactile: CanvasLayer
 var menu: CanvasLayer
 var _amb: AudioStreamPlayer
 var _music: AudioStreamPlayer
@@ -53,6 +54,11 @@ var dbg_verbose := false
 ## ferait échouer toute vérification qui suppose la phase JEU au démarrage.
 var dbg_sansprologue := false
 var dbg_v1 := false
+var dbg_tactile := 0
+## Un doigt posé pendant la lecture d'un document. Sur mobile aucune action
+## clavier n'est émise : sans cela, la feuille resterait ouverte pour toujours.
+var _tape_lecture := false
+var dbg_tactiletest := false
 
 
 func _ready() -> void:
@@ -61,6 +67,10 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	randomize()
 	_parse_cmdline()
+	# avant _build_world : l'interface se dispose différemment selon le mode,
+	# et forcer après coup laissait le HUD dessiné pour un clavier
+	if dbg_tactile != 0:
+		Tactile.forcer(dbg_tactile > 0)
 	_build_world()
 
 
@@ -126,6 +136,12 @@ func _parse_cmdline() -> void:
 			dbg_sansprologue = true
 		elif args[i] == "--v1test":
 			dbg_v1 = true
+		elif args[i] == "--tactile":
+			dbg_tactile = 1
+		elif args[i] == "--clavier":
+			dbg_tactile = -1
+		elif args[i] == "--tactiletest":
+			dbg_tactiletest = true
 		elif args[i] == "--bruit" and i + 1 < args.size():
 			dbg_bruit = float(args[i + 1])
 		elif args[i] == "--menace" and i + 1 < args.size():
@@ -181,6 +197,11 @@ func _build_world() -> void:
 	add_child(menu)
 	menu.bind(player)
 
+	tactile = preload("res://scripts/TouchControls.gd").new()
+	tactile.name = "TouchControls"
+	tactile.joueur = player
+	add_child(tactile)
+
 	# au-dessus du menu : le prologue couvre tout, y compris l'interface
 	prologue = preload("res://scripts/Prologue.gd").new()
 	prologue.name = "Prologue"
@@ -221,6 +242,8 @@ func _build_world() -> void:
 		_run_lore_test()
 	if dbg_v1:
 		_run_v1_test()
+	if dbg_tactiletest:
+		_run_tactile_test()
 	if shot_frames >= 0:
 		_do_shot()
 
@@ -443,13 +466,20 @@ func _spawn_veilleuse() -> void:
 
 
 # --------------------------------------------------------------------------
+func _input(e: InputEvent) -> void:
+	if GameState.phase == GameState.Phase.LECTURE \
+			and e is InputEventScreenTouch and (e as InputEventScreenTouch).pressed:
+		_tape_lecture = true
+
+
 func _process(delta: float) -> void:
 	# Un document ouvert se referme avec la touche qui l'a ouvert, ou Échap.
 	# Prioritaire sur la pause : sinon Échap sur un document ouvrirait le menu
 	# par-dessus la feuille.
 	if GameState.phase == GameState.Phase.LECTURE:
 		if Input.is_action_just_pressed("interact") \
-				or Input.is_action_just_pressed("pause"):
+				or Input.is_action_just_pressed("pause") or _tape_lecture:
+			_tape_lecture = false
 			GameState.fermer_document()
 		return
 
@@ -1209,6 +1239,161 @@ func _run_lore_test() -> void:
 	get_tree().quit()
 
 
+## Commandes tactiles.
+##
+## Ce qui casse en silence ici : un bouton qui en recouvre un autre (les
+## positions sont posées à la main), une action qui reste enfoncée après que
+## les commandes ont disparu, ou un manche qui ne rendrait que du tout-ou-rien
+## là où le jeu attend une force analogique.
+func _run_tactile_test() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var ok := true
+	Tactile.forcer(true)
+	GameState.set_phase(GameState.Phase.JEU, true)
+	await get_tree().process_frame
+
+	print("TACT  mode tactile=%s  commandes visibles=%s" % [Tactile.actif, tactile.visible])
+	if not Tactile.actif or not tactile.visible:
+		ok = false
+
+	# --- 1. aucun bouton n'en recouvre un autre, et tous tiennent à l'écran ---
+	var ecran := get_viewport().get_visible_rect()
+	# tactile est typé CanvasLayer : l'accès à ses membres rend du Variant
+	var noms: Array = tactile._boutons.keys()
+	var chevauche := 0
+	var dehors := []
+	for i in noms.size():
+		var ra: Rect2 = (tactile._boutons[noms[i]] as Control).get_global_rect()
+		if not ecran.encloses(ra):
+			dehors.append(noms[i])
+		for j in range(i + 1, noms.size()):
+			var rb: Rect2 = (tactile._boutons[noms[j]] as Control).get_global_rect()
+			if ra.intersects(rb):
+				print("TACT  ! %s recouvre %s" % [noms[i], noms[j]])
+				chevauche += 1
+	print("TACT  %d boutons : %d chevauchements, hors ecran %s  (ecran %.0fx%.0f)"
+			% [noms.size(), chevauche, str(dehors), ecran.size.x, ecran.size.y])
+	if chevauche > 0 or not dehors.is_empty():
+		ok = false
+
+	# --- 2. le manche rend une force ANALOGIQUE, pas du tout-ou-rien ---
+	var centre: Vector2 = Vector2(ecran.size.x * 0.22, ecran.size.y * 0.7)
+	tactile._poser(0, centre)
+	tactile._maj_manche(centre + Vector2(0, -tactile.RAYON * 0.5))
+	var demi: float = Input.get_action_strength("move_forward")
+	var sprint_demi := Input.is_action_pressed("sprint")
+	tactile._maj_manche(centre + Vector2(0, -tactile.RAYON))
+	var plein: float = Input.get_action_strength("move_forward")
+	var sprint_plein := Input.is_action_pressed("sprint")
+	tactile._maj_manche(centre + Vector2(tactile.RAYON, 0))
+	var droite: float = Input.get_action_strength("move_right")
+	print("TACT  manche : moitie avant=%.2f (course=%s)  plein avant=%.2f (course=%s)  plein droite=%.2f"
+			% [demi, sprint_demi, plein, sprint_plein, droite])
+	if absf(demi - 0.5) > 0.12 or plein < 0.97 or droite < 0.97 \
+			or sprint_demi or not sprint_plein:
+		print("TACT  ! le manche ne restitue pas une force analogique correcte")
+		ok = false
+
+	tactile._lever(0, centre)
+	var relache: bool = Input.get_action_strength("move_forward") == 0.0 \
+			and not Input.is_action_pressed("sprint")
+	print("TACT  doigt leve : tout relache=%s" % relache)
+	if not relache:
+		ok = false
+
+	# --- 3. chaque bouton presse SON action, et la relâche ---
+	var mauvais := []
+	for action in tactile._boutons:
+		var b: Control = tactile._boutons[action]
+		var c: Vector2 = b.get_global_rect().get_center()
+		tactile._poser(1, c)
+		var presse: bool = Input.is_action_pressed(action)
+		tactile._lever(1, c)
+		var laché: bool = not Input.is_action_pressed(action)
+		if not presse or not laché:
+			mauvais.append(action)
+	print("TACT  boutons : %d testes, defaillants %s" % [tactile._boutons.size(), str(mauvais)])
+	if not mauvais.is_empty():
+		ok = false
+
+	# --- 4. rien ne reste enfoncé quand les commandes disparaissent ---
+	#
+	# C'est le piège du bouton pause : il change la phase, donc masque les
+	# commandes, et le doigt qui se lève n'est alors plus reçu — l'action
+	# resterait enfoncée et on rebasculerait en pause aussitôt sorti.
+	#
+	# On presse le bouton et on laisse LE JEU réagir, sans forcer la phase à la
+	# main : forcer en plus du bouton provoquait un double basculement qui
+	# remettait en jeu, et le test mesurait alors sa propre interférence.
+	# Le doigt n'est volontairement jamais levé : c'est tout le sujet.
+	tactile._poser(2, (tactile._boutons["pause"] as Control).get_global_rect().get_center())
+	for f in 4:
+		await get_tree().process_frame
+	print("TACT  bouton pause : phase=%s" % [GameState.phase == GameState.Phase.PAUSE])
+	if GameState.phase != GameState.Phase.PAUSE:
+		ok = false
+	var coince := []
+	for a in ["pause", "interact", "hold_breath", "crouch", "flashlight",
+			"move_forward", "sprint"]:
+		if Input.is_action_pressed(a):
+			coince.append(a)
+	print("TACT  apres masquage : commandes visibles=%s  actions restees enfoncees %s"
+			% [tactile.visible, str(coince)])
+	if tactile.visible or not coince.is_empty():
+		ok = false
+
+	# --- 5. la visée passe par le même chemin que la souris ---
+	GameState.set_phase(GameState.Phase.JEU, true)
+	await get_tree().process_frame
+	player.set_look(0.0, 0.0)
+	var avant: float = player._yaw
+	player.tourner(Vector2(120, 0))
+	var apres: float = player._yaw
+	# tourner() met à jour le lacet ; c'est _physics_process qui le reporte sur
+	# le noeud, d'où l'attente avant de vérifier que la vue a réellement pivoté
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var applique: float = player.rotation.y
+	print("TACT  visee : lacet %.3f -> %.3f, rotation du noeud %.3f"
+			% [avant, apres, applique])
+	if absf(apres - avant) < 0.01 or absf(applique - apres) > 0.01:
+		ok = false
+
+	# --- 5 bis. la souris émulée ne doit PAS pivoter la vue ---
+	# Godot fabrique des événements souris à partir des touchers. Sans garde,
+	# un glissement de visée s'appliquait deux fois, et le manche de
+	# déplacement faisait tourner la tête en même temps qu'avancer.
+	player.set_look(0.0, 0.0)
+	var mm := InputEventMouseMotion.new()
+	mm.relative = Vector2(200, 0)
+	player._input(mm)
+	var bouge_tactile: float = absf(player._yaw)
+	Tactile.forcer(false)
+	player.set_look(0.0, 0.0)
+	player._input(mm)
+	var bouge_clavier: float = absf(player._yaw)
+	Tactile.forcer(true)
+	print("TACT  motion souris : en tactile lacet=%.3f (attendu 0)  en clavier lacet=%.3f (doit bouger)"
+			% [bouge_tactile, bouge_clavier])
+	if bouge_tactile > 0.0001 or bouge_clavier < 0.01:
+		print("TACT  ! la souris emulee pivote la vue en plus du doigt")
+		ok = false
+
+	# --- 6. les menus offrent des cibles au doigt ---
+	var h_tactile: int = Tactile.hauteur_bouton()
+	Tactile.forcer(false)
+	var h_clavier: int = Tactile.hauteur_bouton()
+	Tactile.forcer(true)
+	print("TACT  hauteur de bouton : tactile %d px, clavier %d px" % [h_tactile, h_clavier])
+	if h_tactile < 44 or h_tactile <= h_clavier:
+		ok = false
+
+	Tactile.forcer(false)
+	print("TACT RESULTAT : %s" % ("OK" if ok else "ECHEC"))
+	get_tree().quit()
+
+
 ## Prologue et crédits : les deux ajouts qui bouclent la V1.
 ##
 ## Ce qu'on vérifie ici est ce qui casse en silence : un prologue impossible à
@@ -1265,12 +1450,18 @@ func _run_v1_test() -> void:
 		print("V1  ! un paragraphe avance sans le joueur")
 		ok = false
 
-	# l'invite doit dire ce que la touche fait maintenant
+	# L'invite doit dire ce que l'entrée fait maintenant, ET le saut doit
+	# rester accessible. Les deux prennent une forme différente selon le mode :
+	# au clavier tout tient dans la ligne d'invite, au doigt le saut devient un
+	# bouton — un doigt ne peut pas presser Échap.
 	var invite: String = prologue._invite.text
-	print("V1  invite en attente : \"%s\"" % invite)
-	if not ("continuer" in invite or "descendre" in invite) \
-			or not ("passer" in invite):
-		print("V1  ! l'invite ne nomme pas les deux actions")
+	var avance_nommee: bool = "continuer" in invite or "descendre" in invite
+	var saut_possible: bool = ("passer" in invite) if not Tactile.actif \
+			else (prologue._passer != null and prologue._passer.visible)
+	print("V1  invite en attente : \"%s\"  (mode %s, saut accessible=%s)"
+			% [invite, "tactile" if Tactile.actif else "clavier", saut_possible])
+	if not avance_nommee or not saut_possible:
+		print("V1  ! l'avance ou le saut n'est pas accessible dans ce mode")
 		ok = false
 
 	# une pression fait bien avancer d'UN temps

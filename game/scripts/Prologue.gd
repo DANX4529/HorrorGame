@@ -40,6 +40,8 @@ var _montres := 0.0
 var _minuteur := 0.0
 var _t := 0.0
 var _garde := 0.0
+var _tape := false          ## un doigt s'est posé depuis la dernière image
+var _passer: Button
 
 
 func _ready() -> void:
@@ -81,6 +83,23 @@ func _construire() -> void:
 	_invite.offset_top = -56; _invite.offset_bottom = -34
 	_invite.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(_invite)
+
+	# Un doigt ne peut pas presser Échap : le saut de l'introduction doit
+	# exister comme vrai bouton, sinon le seul moyen de passer serait de
+	# valider onze fois.
+	_passer = Button.new()
+	_passer.text = "Passer l'introduction"
+	_passer.add_theme_font_size_override("font_size", 15)
+	_passer.add_theme_color_override("font_color", Color(0.62, 0.64, 0.60))
+	_passer.add_theme_color_override("font_hover_color", Color(0.95, 0.93, 0.86))
+	_passer.add_theme_color_override("font_pressed_color", Color(1, 1, 1))
+	_passer.flat = true
+	_passer.set_anchors_preset(Control.PRESET_TOP_RIGHT, false)
+	_passer.offset_left = -258; _passer.offset_right = -14
+	_passer.offset_top = 14; _passer.offset_bottom = 68
+	_passer.visible = false
+	_passer.pressed.connect(_terminer)
+	add_child(_passer)
 
 
 func _sur_phase(p: int) -> void:
@@ -124,7 +143,8 @@ func _process(delta: float) -> void:
 	if Input.is_action_just_pressed("pause"):
 		_terminer()
 		return
-	var avance := Input.is_action_just_pressed("interact")
+	var avance := Input.is_action_just_pressed("interact") or _tape
+	_tape = false
 
 	match _etat:
 		Etat.FRAPPE:
@@ -178,7 +198,26 @@ func _maj_invite() -> void:
 	var action := "afficher"
 	if _etat == Etat.ATTENTE:
 		action = "descendre" if dernier else "continuer"
-	_invite.text = "[Espace] %s          [Échap] passer l'introduction" % action
+	if Tactile.actif:
+		# l'invite parle de toucher plutôt que de touches, et le saut prend la
+		# forme d'un bouton
+		_invite.text = "Touchez l'écran pour %s" % action
+	else:
+		_invite.text = "[Espace] %s          [Échap] passer l'introduction" % action
+	if _passer:
+		_passer.visible = Tactile.actif
+
+
+## Un doigt posé n'importe où fait avancer — sauf sur le bouton « passer »,
+## qui a son propre effet.
+func _input(e: InputEvent) -> void:
+	if GameState.phase != GameState.Phase.PROLOGUE:
+		return
+	if e is InputEventScreenTouch and (e as InputEventScreenTouch).pressed:
+		var pos: Vector2 = (e as InputEventScreenTouch).position
+		if _passer and _passer.visible and _passer.get_global_rect().has_point(pos):
+			return
+		_tape = true
 
 
 func _terminer() -> void:

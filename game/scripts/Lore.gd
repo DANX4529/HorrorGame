@@ -64,7 +64,7 @@ const CREDITS := [
 	["", [
 		"RESPIRE",
 		"Sanatorium du Mont-Cendre — 1961",
-		"version 1.0.1",
+		"version 1.0.2",
 	]],
 	["Conception, écriture et réalisation", [
 		"Liam RIIS",
@@ -97,6 +97,11 @@ const CREDITS := [
 	["Bande-son synthétisée", [
 		"Apnée, nappe de traque, remise sous tension et stings",
 		"sont synthétisés pour ce jeu (DSP numpy).",
+	]],
+	["Sur téléphone", [
+		"Le jeu détecte le doigt et adapte ses commandes :",
+		"manche à gauche, visée à droite, boutons à portée de pouce.",
+		"À jouer en paysage.",
 	]],
 	["Merci", [
 		"À celles et ceux qui ont testé dans le noir.",

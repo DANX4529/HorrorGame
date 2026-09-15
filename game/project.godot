@@ -6,7 +6,7 @@ config_version=5
 [application]
 
 config/name="RESPIRE"
-config/version="1.0.1"
+config/version="1.0.2"
 config/description="Jeu d'horreur psychologique. Elle chasse au son. Retenez votre souffle."
 run/main_scene="res://scenes/Main.tscn"
 config/features=PackedStringArray("4.3", "GL Compatibility")
@@ -22,6 +22,7 @@ MaterialLib="*res://scripts/MaterialLib.gd"
 NoiseBus="*res://scripts/NoiseBus.gd"
 Audio="*res://scripts/AudioLib.gd"
 Lore="*res://scripts/Lore.gd"
+Tactile="*res://scripts/Tactile.gd"
 
 [audio]
 
