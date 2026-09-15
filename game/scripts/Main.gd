@@ -1360,6 +1360,114 @@ func _run_tactile_test() -> void:
 	if absf(apres - avant) < 0.01 or absf(applique - apres) > 0.01:
 		ok = false
 
+	# --- 4 bis. DEUX DOIGTS À LA FOIS : avancer en regardant autour ---
+	# Le geste normal du jeu, et celui qu'aucune vérification ne couvrait :
+	# les doigts étaient posés puis levés l'un après l'autre.
+	GameState.set_phase(GameState.Phase.JEU, true)
+	await get_tree().process_frame
+	player.set_look(0.0, 0.0)
+	var g := Vector2(ecran.size.x * 0.22, ecran.size.y * 0.7)
+	var d := Vector2(ecran.size.x * 0.78, ecran.size.y * 0.5)
+	tactile._poser(0, g)                      # pouce gauche : le manche
+	tactile._poser(1, d)                      # pouce droit : la visée
+	print("TACT  deux doigts : manche=%d visee=%d" % [tactile._doigt_manche, tactile._doigt_visee])
+	tactile._maj_manche(g + Vector2(0, -tactile.RAYON))
+	var av_yaw: float = player._yaw
+	# on simule le glissement du pouce droit comme le fait l'evenement reel
+	for k in 10:
+		var ev := InputEventScreenDrag.new()
+		ev.index = 1
+		ev.position = d + Vector2(k * 6, 0)
+		ev.relative = Vector2(6, 0)
+		tactile._unhandled_input(ev)
+	var avance: float = Input.get_action_strength("move_forward")
+	var tourne: float = absf(player._yaw - av_yaw)
+	print("TACT  en glissant a droite : avance=%.2f  rotation=%.3f rad" % [avance, tourne])
+	if avance < 0.9:
+		print("TACT  ! regarder autour interrompt le deplacement")
+		ok = false
+	if tourne < 0.01:
+		print("TACT  ! avancer empeche de regarder autour")
+		ok = false
+	# et l'inverse : bouger le manche ne doit pas faire tourner la tete
+	var yaw2: float = player._yaw
+	for k in 8:
+		var ev2 := InputEventScreenDrag.new()
+		ev2.index = 0
+		ev2.position = g + Vector2(k * 5, -tactile.RAYON)
+		ev2.relative = Vector2(5, 0)
+		tactile._unhandled_input(ev2)
+	var parasite: float = absf(player._yaw - yaw2)
+	print("TACT  en bougeant le manche : rotation parasite=%.4f rad (attendu 0)" % parasite)
+	if parasite > 0.0001:
+		print("TACT  ! le manche fait pivoter la vue")
+		ok = false
+	# le pouce droit se pose SUR un bouton puis glisse : il doit viser
+	var bcoin: Control = tactile._boutons["hold_breath"]
+	var pb: Vector2 = bcoin.get_global_rect().get_center()
+	var yaw3: float = player._yaw
+	tactile._lever(1, d)
+	tactile._poser(1, pb)
+	var presse_dabord: bool = Input.is_action_pressed("hold_breath")
+	for k in 8:
+		var ev3 := InputEventScreenDrag.new()
+		ev3.index = 1
+		ev3.position = pb + Vector2(-14 * k, -6 * k)
+		ev3.relative = Vector2(-14, -6)
+		tactile._unhandled_input(ev3)
+	var rendu: bool = not Input.is_action_pressed("hold_breath")
+	var vise: float = absf(player._yaw - yaw3)
+	print("TACT  doigt pose SUR un bouton puis glisse : bouton presse=%s puis relache=%s, rotation=%.3f rad"
+			% [presse_dabord, rendu, vise])
+	if not presse_dabord or not rendu or vise < 0.01:
+		print("TACT  ! un doigt parti d'un bouton ne peut jamais viser")
+		ok = false
+	tactile._lever(1, pb)
+
+	# un SECOND doigt posé à gauche doit viser aussi, pas être ignoré
+	var yaw4: float = player._yaw
+	tactile._poser(2, Vector2(ecran.size.x * 0.30, ecran.size.y * 0.35))
+	for k in 6:
+		var ev4 := InputEventScreenDrag.new()
+		ev4.index = 2
+		ev4.position = Vector2(ecran.size.x * 0.30 + 12 * k, ecran.size.y * 0.35)
+		ev4.relative = Vector2(12, 0)
+		tactile._unhandled_input(ev4)
+	var vise2: float = absf(player._yaw - yaw4)
+	print("TACT  second doigt a gauche : rotation=%.3f rad" % vise2)
+	if vise2 < 0.01:
+		print("TACT  ! un second doigt pose a gauche est ignore")
+		ok = false
+	tactile._lever(2, Vector2(ecran.size.x * 0.30, ecran.size.y * 0.35))
+
+	tactile._lever(0, g)
+
+	# --- 4 ter. tourner EN MARCHANT ne doit pas faire basculer la vue ---
+	# cam.rotation.z s'incline selon l'angle entre la vitesse et le cap. Quand
+	# on pivote tout en avançant, la vitesse acquise devient un « pas de côté »
+	# aux yeux de cette formule, et la caméra roule.
+	GameState.set_phase(GameState.Phase.JEU, true)
+	player.set_look(0.0, 0.0)
+	player.can_move = true
+	Input.action_press("move_forward", 1.0)
+	Input.action_press("sprint")
+	for f in 40:
+		await get_tree().physics_frame
+	var v_avant: float = player.velocity.length()
+	var roulis_max := 0.0
+	# demi-tour rapide, comme un joueur qui se retourne en fuyant
+	for f in 30:
+		player.tourner(Vector2(26, 0))
+		await get_tree().physics_frame
+		roulis_max = maxf(roulis_max, absf(player.cam.rotation.z))
+	Input.action_release("move_forward")
+	Input.action_release("sprint")
+	print("TACT  demi-tour en courant (%.1f m/s) : roulis maximal %.4f rad = %.2f degres"
+			% [v_avant, roulis_max, rad_to_deg(roulis_max)])
+	if rad_to_deg(roulis_max) > 4.0:
+		print("TACT  ! la vue bascule visiblement quand on tourne en marchant")
+		ok = false
+
 	# --- 5 bis. la souris émulée ne doit PAS pivoter la vue ---
 	# Godot fabrique des événements souris à partir des touchers. Sans garde,
 	# un glissement de visée s'appliquait deux fois, et le manche de

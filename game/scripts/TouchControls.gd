@@ -27,6 +27,11 @@ const ZONE_MORTE := 0.14
 const SEUIL_COURSE := 0.82     ## pousser à fond = courir
 const TAILLE_BOUTON := 82.0
 const VISEE_GAIN := 1.35       ## un doigt parcourt moins de chemin qu'une souris
+## Au-delà de cette distance, un doigt parti d'un bouton n'appuyait pas : il
+## visait. Les boutons occupent le coin bas-droit, c'est-à-dire l'endroit
+## exact où le pouce droit se pose ; sans cette bascule, un doigt posé là
+## appartenait au bouton pour toujours et ne faisait jamais tourner la vue.
+const GLISSEMENT_VISEE := 26.0
 
 var joueur: Node = null
 
@@ -39,6 +44,7 @@ var _centre := Vector2.ZERO
 var _dir := Vector2.ZERO
 var _boutons: Dictionary = {}  ## action -> Control
 var _souffle: Control
+var _depart_visee := Vector2.ZERO
 
 
 func _ready() -> void:
@@ -74,6 +80,8 @@ func _relacher_tout() -> void:
 		Input.action_release(action)
 		if b.has_meta("doigt"):
 			b.remove_meta("doigt")
+		if b.has_meta("depart"):
+			b.remove_meta("depart")
 		_marquer(b, false)
 	_doigt_manche = -1
 	_doigt_visee = -1
@@ -183,7 +191,31 @@ func _unhandled_input(e: InputEvent) -> void:
 			_maj_manche(d.position)
 		elif d.index == _doigt_visee and is_instance_valid(joueur):
 			joueur.tourner(d.relative * VISEE_GAIN)
+		else:
+			_glisser_depuis_bouton(d)
 		get_viewport().set_input_as_handled()
+
+
+## Un doigt parti d'un bouton mais qui glisse franchement cherchait à viser,
+## pas à appuyer. On lui rend le bouton et on lui donne la visée.
+func _glisser_depuis_bouton(d: InputEventScreenDrag) -> void:
+	for action in _boutons:
+		var b: Control = _boutons[action]
+		if not b.has_meta("doigt") or int(b.get_meta("doigt")) != d.index:
+			continue
+		var depart: Vector2 = b.get_meta("depart", d.position)
+		if depart.distance_to(d.position) < GLISSEMENT_VISEE:
+			return
+		Input.action_release(action)
+		_marquer(b, false)
+		b.remove_meta("doigt")
+		b.remove_meta("depart")
+		if _doigt_visee == -1:
+			_doigt_visee = d.index
+			_depart_visee = d.position
+			if is_instance_valid(joueur):
+				joueur.tourner(d.relative * VISEE_GAIN)
+		return
 
 
 func _poser(index: int, pos: Vector2) -> void:
@@ -194,16 +226,20 @@ func _poser(index: int, pos: Vector2) -> void:
 			Input.action_press(action)
 			_marquer(b, true)
 			b.set_meta("doigt", index)
+			b.set_meta("depart", pos)
 			return
-	if pos.x < get_viewport().get_visible_rect().size.x * 0.5:
-		if _doigt_manche == -1:
-			_doigt_manche = index
-			_centre = pos
-			_manche_fond.visible = true
-			_manche_fond.position = pos - Vector2(RAYON, RAYON)
-			_maj_manche(pos)
+	# Le manche n'est proposé que sur la moitié gauche, mais la visée accepte
+	# un doigt N'IMPORTE OÙ dès lors que le manche est déjà tenu. Un second
+	# doigt posé à gauche était auparavant ignoré purement et simplement.
+	if pos.x < get_viewport().get_visible_rect().size.x * 0.5 and _doigt_manche == -1:
+		_doigt_manche = index
+		_centre = pos
+		_manche_fond.visible = true
+		_manche_fond.position = pos - Vector2(RAYON, RAYON)
+		_maj_manche(pos)
 	elif _doigt_visee == -1:
 		_doigt_visee = index
+		_depart_visee = pos
 
 
 func _lever(index: int, _pos: Vector2) -> void:
@@ -213,6 +249,7 @@ func _lever(index: int, _pos: Vector2) -> void:
 			Input.action_release(action)
 			_marquer(b, false)
 			b.remove_meta("doigt")
+			b.remove_meta("depart")
 			return
 	if index == _doigt_manche:
 		_doigt_manche = -1
