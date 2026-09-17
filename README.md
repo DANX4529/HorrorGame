@@ -238,3 +238,22 @@ donnée par honnêteté plutôt que par obligation.
 
 Moteur : [Godot Engine 4.3](https://godotengine.org) (MIT).
 Outillage : Blender (via `bpy`), numpy, Pillow, ffmpeg.
+
+---
+
+## Publier une version
+
+Pousser un tag `vX.Y.Z` déclenche [`.github/workflows/release.yml`](.github/workflows/release.yml),
+qui **reconstruit depuis la source taguée** — jamais depuis un artefact déjà
+publié, sans quoi une release pourrait livrer un binaire ne correspondant pas
+à son propre tag —, fait passer la suite de tests en barrière, puis publie
+l'exécutable Windows, son zip et le build web.
+
+```bash
+git tag -a v1.2.0 -m "RESPIRE v1.2.0"
+git push origin v1.2.0
+```
+
+Les notes de version sont reprises de `docs/RELEASE-<tag>.md` s'il existe.
+Le workflow se relance sans risque sur un tag déjà publié : il remplace les
+fichiers au lieu d'échouer.

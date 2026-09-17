@@ -1,0 +1,144 @@
+# Publie une release quand un tag « vX.Y.Z » est poussé.
+#
+# POURQUOI RECONSTRUIRE ICI plutôt que de récupérer le zip déjà publié sur
+# gh-pages, qui serait bien plus rapide : parce que rien ne garantit que
+# gh-pages soit à jour au moment du tag. Une release livrerait alors un
+# binaire qui ne correspond pas à son propre tag, sans que rien ne le
+# signale — le pire des défauts, celui qu'on ne voit pas. Ici le binaire est
+# construit À PARTIR de la source taguée, donc il lui correspond par
+# construction.
+#
+# Le dépôt versionne tous ses assets (audio, modèles, textures, matériaux) :
+# cette chaîne n'a besoin ni de Blender ni de numpy, seulement de Godot.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+  # Filet de sécurité : si le déclenchement par tag pose problème, on peut
+  # toujours lancer la publication à la main depuis l'onglet Actions.
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag à publier (doit déjà exister, ex. v1.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  GODOT_VERSION: "4.3"
+
+jobs:
+  publier:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Déterminer le tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "nom=${{ inputs.tag }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "nom=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.tag.outputs.nom }}
+
+      - name: Installer Godot ${{ env.GODOT_VERSION }} et ses modèles d'export
+        run: |
+          set -euo pipefail
+          V="${GODOT_VERSION}-stable"
+          BASE="https://github.com/godotengine/godot/releases/download/${V}"
+          curl -fsSL -o godot.zip "${BASE}/Godot_v${V}_linux.x86_64.zip"
+          unzip -q godot.zip
+          mv "Godot_v${V}_linux.x86_64" /usr/local/bin/godot
+          chmod +x /usr/local/bin/godot
+          godot --version
+          # Les modèles doivent porter le nom exact « 4.3.stable », sans quoi
+          # l'export échoue en disant seulement qu'il ne les trouve pas.
+          curl -fsSL -o templates.tpz "${BASE}/Godot_v${V}_export_templates.tpz"
+          unzip -q templates.tpz
+          mkdir -p "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable"
+          mv templates/* "$HOME/.local/share/godot/export_templates/${GODOT_VERSION}.stable/"
+
+      # Les tests tournent sur le PROJET, avant l'export : une release cassée
+      # ne doit jamais partir. Ils sont sans interface mais ont besoin d'un
+      # écran (Xvfb) et du rendu logiciel, le runner n'ayant pas de carte
+      # graphique. Si cette barrière s'avérait capricieuse sur le runner, la
+      # supprimer ne casse rien d'autre : elle ne fait que vérifier.
+      - name: Installer Xvfb
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq xvfb
+
+      - name: Préparer les ressources
+        run: godot --headless --path game --import >/dev/null 2>&1 || true
+
+      - name: Vérifier le jeu (barrière avant publication)
+        run: |
+          set -uo pipefail
+          echecs=0
+          for t in ambiancetest tactiletest v1test menutest rungame loretest lisibilite; do
+            sortie=$(timeout 400 xvfb-run -a -s "-screen 0 1280x720x24" \
+              godot --path game --rendering-driver opengl3 --resolution 1280x720 \
+              -- "--$t" 2>&1 || true)
+            if echo "$sortie" | grep -qE "RESULTAT : OK"; then
+              echo "  $t : OK"
+            else
+              echo "::error::le test $t a échoué"
+              echo "$sortie" | grep -iE "RESULTAT|! " | head -8
+              echecs=$((echecs+1))
+            fi
+          done
+          [ "$echecs" -eq 0 ] || { echo "::error::$echecs test(s) en échec, publication annulée"; exit 1; }
+
+      - name: Construire les exécutables
+        run: GODOT=godot ./tools/godot/build_release.sh all
+
+      - name: Vérifier que les artefacts existent et ne sont pas vides
+        run: |
+          set -euo pipefail
+          for f in build/RESPIRE-windows.exe build/RESPIRE-windows.zip build/web/index.pck; do
+            [ -s "$f" ] || { echo "::error::$f manquant ou vide"; exit 1; }
+          done
+          # Un exécutable Windows commence par « MZ » : si l'export a
+          # silencieusement produit autre chose, on s'arrête ici plutôt que de
+          # publier un fichier que personne ne pourra lancer.
+          head -c2 build/RESPIRE-windows.exe | grep -q "^MZ" \
+            || { echo "::error::l'exe ne commence pas par MZ"; exit 1; }
+          ( cd build && zip -9 -qr RESPIRE-web.zip web )
+          ls -lh build/RESPIRE-windows.exe build/RESPIRE-windows.zip build/RESPIRE-web.zip
+
+      - name: Rassembler les notes de version
+        id: notes
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.nom }}"
+          F="docs/RELEASE-${TAG}.md"
+          if [ -f "$F" ]; then
+            # on retire le commentaire d'en-tête, qui ne s'adresse pas aux joueurs
+            sed '/^<!--/,/-->/d' "$F" > notes.md
+          else
+            printf 'RESPIRE %s\n\nJouable dans le navigateur : https://danx4529.github.io/HorrorGame/\n' \
+              "$TAG" > notes.md
+          fi
+          wc -c notes.md
+
+      - name: Publier la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.nom }}"
+          # Idempotent : relancer sur un tag déjà publié remplace les fichiers
+          # au lieu d'échouer, ce qui permet de corriger une publication ratée.
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" --clobber \
+              build/RESPIRE-windows.exe build/RESPIRE-windows.zip build/RESPIRE-web.zip
+          else
+            gh release create "$TAG" \
+              --title "RESPIRE $TAG" --notes-file notes.md \
+              build/RESPIRE-windows.exe build/RESPIRE-windows.zip build/RESPIRE-web.zip
+          fi
+          gh release view "$TAG" --json name,assets \
+            --jq '.name + " -> " + ([.assets[].name] | join(", "))'
