@@ -43,6 +43,7 @@ var dbg_lisibilite := false
 var dbg_bruit := -1.0
 var dbg_menace := -1.0
 var dbg_lore := false
+var dbg_sauve := false
 var dbg_doc := ""
 var dbg_tpdoc := -1
 var dbg_seed := 0
@@ -120,6 +121,8 @@ func _parse_cmdline() -> void:
 			dbg_lisibilite = true
 		elif args[i] == "--loretest":
 			dbg_lore = true
+		elif args[i] == "--sauvetest":
+			dbg_sauve = true
 		elif args[i] == "--doc" and i + 1 < args.size():
 			dbg_doc = args[i + 1]
 		elif args[i] == "--tpdoc" and i + 1 < args.size():
@@ -158,7 +161,7 @@ func _build_world() -> void:
 		# donc du disque. Le test doit partir d'une ardoise vierge AVANT la
 		# construction, sinon il mesure l'historique de la machine.
 		DirAccess.remove_absolute(GameState.FICHIER_PROGRESSION)
-		GameState.documents_lus.clear()
+		GameState.oublier_tout()
 		GameState.souffle_appris = false
 	# l'état de reprise doit être connu AVANT de semer les fusibles
 	GameState.reset_run()
@@ -172,7 +175,10 @@ func _build_world() -> void:
 	add_child(level)
 	if dbg_seed != 0:
 		GameState.graine = dbg_seed
-	level.build(GameState.graine)
+	# L'étage courant, ou le premier si aucune campagne n'est ouverte (lancement
+	# direct, outils de diagnostic, tests) : build() retombe alors tout seul
+	# sur le sanatorium historique.
+	level.build(GameState.graine, GameState.etage_def())
 
 	player = Player.new()
 	player.name = "Player"
@@ -245,6 +251,8 @@ func _build_world() -> void:
 		_run_lisibilite_test()
 	if dbg_lore:
 		_run_lore_test()
+	if dbg_sauve:
+		_run_sauve_test()
 	if dbg_v1:
 		_run_v1_test()
 	if dbg_tactiletest:
@@ -563,11 +571,27 @@ func _run_objective_test() -> void:
 		print("RUNGAME  ECHEC : monte-charge absent")
 		ok = false
 	else:
+		# Le monte-charge ne fait plus gagner : il ouvre la cabine, qui met le
+		# butin à l'abri et propose l'étage du dessous. On vérifie les deux —
+		# la bascule de phase ET le versement du butin, car une cabine qui
+		# s'ouvre sans rien mettre à l'abri perdrait silencieusement la partie
+		# de récit que le joueur vient de ramasser.
+		var en_main_avant := GameState.documents_en_cours()
+		var acquis_avant := GameState.documents_acquis()
 		ex.interact(player)
 		await get_tree().process_frame
-		print("RUNGAME  phase finale = %d (VICTOIRE=%d)"
-				% [GameState.phase, GameState.Phase.VICTOIRE])
-		if GameState.phase != GameState.Phase.VICTOIRE:
+		print("RUNGAME  phase finale = %d (CABINE=%d)"
+				% [GameState.phase, GameState.Phase.CABINE])
+		if GameState.phase != GameState.Phase.CABINE:
+			ok = false
+		print("RUNGAME  butin : %d en main -> archive %d puis %d (reste en main %d)"
+				% [en_main_avant, acquis_avant, GameState.documents_acquis(),
+				   GameState.documents_en_cours()])
+		if GameState.documents_acquis() != acquis_avant + en_main_avant:
+			print("RUNGAME  ECHEC : la cabine n'a pas verse le butin dans l'archive")
+			ok = false
+		if GameState.documents_en_cours() != 0:
+			print("RUNGAME  ECHEC : du butin reste en main apres la cabine")
 			ok = false
 
 	# --- portes : ouverture réelle ET accessibilité au rayon du joueur ---
@@ -782,7 +806,8 @@ func _run_menu_test() -> void:
 		print("MENUTEST  prologue affiche, on le passe")
 		prologue._terminer()
 		await get_tree().process_frame
-	var ETAT := ["TITRE", "JEU", "PAUSE", "MORT", "VICTOIRE", "LECTURE", "PROLOGUE"]
+	var ETAT := ["TITRE", "JEU", "PAUSE", "MORT", "VICTOIRE", "LECTURE", "PROLOGUE",
+			"CABINE"]
 	var etape: int = GameState.test_menu
 	var jouable: bool = (GameState.phase == GameState.Phase.JEU
 			and is_instance_valid(player) and player.can_move
@@ -1002,7 +1027,7 @@ func _run_lore_test() -> void:
 	await get_tree().process_frame
 	var ok := true
 	DirAccess.remove_absolute(GameState.FICHIER_PROGRESSION)
-	GameState.documents_lus.clear()
+	GameState.oublier_tout()
 
 	# --- 1. tout document écrit est placé, et atteignable ---
 	var places := {}
@@ -1146,7 +1171,7 @@ func _run_lore_test() -> void:
 	print("LORE  tout lu : %d documents places (attendu 0)" % apres_tout)
 	if apres_tout != 0:
 		ok = false
-	GameState.documents_lus.clear()
+	GameState.oublier_tout()
 
 	# --- 5. lecture : phase, enregistrement, fermeture ---
 	GameState.set_phase(GameState.Phase.JEU, true)
@@ -1163,18 +1188,54 @@ func _run_lore_test() -> void:
 	if neuf or not en_lecture or not fige or not enregistre or not revenu:
 		ok = false
 
-	# --- 6. la découverte se conserve d'une descente à l'autre ---
+	# --- 6. lire ne suffit pas : il faut remonter ---
+	#
+	# C'est la règle qui donne son enjeu à la descente, et elle a deux moitiés
+	# également importantes : mourir doit coûter, et remonter doit payer. Les
+	# deux se vérifient ici, parce qu'un bug sur l'une ou l'autre serait
+	# invisible en jouant — soit on perdrait un récit qu'on croyait acquis,
+	# soit l'enjeu n'existerait pas du tout sans que rien ne le signale.
+	GameState.oublier_tout()
+	var lecteur := ConfigFile.new()
+
+	# a. lire met en main, et n'écrit RIEN sur le disque
 	for d in Lore.DOCUMENTS:
 		GameState.lire_document(str(d["id"]))
-	var avant := GameState.documents_trouves()
-	GameState.documents_lus.clear()
-	var relu := ConfigFile.new()
-	relu.load(GameState.FICHIER_PROGRESSION)
-	for id in relu.get_value("documents", "lus", []):
+	lecteur.load(GameState.FICHIER_PROGRESSION)
+	var sur_disque: int = (lecteur.get_value("documents", "lus", []) as Array).size()
+	print("LORE  en main %d  acquis %d  sur le disque %d  (attendu %d / 0 / 0)"
+			% [GameState.documents_en_cours(), GameState.documents_acquis(),
+			   sur_disque, Lore.total()])
+	if GameState.documents_en_cours() != Lore.total() \
+			or GameState.documents_acquis() != 0 or sur_disque != 0:
+		ok = false
+
+	# b. mourir perd le butin, et seulement le butin
+	var perdus := GameState.perdre_butin()
+	print("LORE  mort : %d perdus, archive intacte a %d"
+			% [perdus, GameState.documents_acquis()])
+	if perdus != Lore.total() or GameState.documents_acquis() != 0:
+		ok = false
+
+	# c. remonter verse le butin dans l'archive, et ça survit au disque
+	for d in Lore.DOCUMENTS:
+		GameState.lire_document(str(d["id"]))
+	var remontes := GameState.remonter_butin()
+	GameState.oublier_tout()
+	lecteur.clear()
+	lecteur.load(GameState.FICHIER_PROGRESSION)
+	for id in lecteur.get_value("documents", "lus", []):
 		GameState.documents_lus[id] = true
-	print("LORE  persistance : %d lus -> %d relus depuis le disque"
-			% [avant, GameState.documents_trouves()])
-	if avant != Lore.total() or GameState.documents_trouves() != avant:
+	print("LORE  cabine : %d remontes -> %d relus depuis le disque (attendu %d)"
+			% [remontes, GameState.documents_acquis(), Lore.total()])
+	if remontes != Lore.total() or GameState.documents_acquis() != Lore.total():
+		ok = false
+
+	# d. la sauvegarde n'a rien perdu d'autre au passage : c'est le bug de
+	#    ConfigFile.save() qui n'écrit que ce qu'il a en mémoire, et il a déjà
+	#    coûté ses records au joueur une fois.
+	if not lecteur.has_section_key("meta", "version"):
+		print("LORE  ECHEC : la cabine a ecrit sans relire, [meta] a disparu")
 		ok = false
 
 	# --- 7. cohérence de la table elle-même ---
@@ -1232,7 +1293,7 @@ func _run_lore_test() -> void:
 	menu._afficher(menu.Ecran.AUCUN)
 
 	DirAccess.remove_absolute(GameState.FICHIER_PROGRESSION)
-	GameState.documents_lus.clear()
+	GameState.oublier_tout()
 	print("LORE RESULTAT : %s" % ("OK" if ok else "ECHEC"))
 	get_tree().quit()
 
@@ -1752,6 +1813,98 @@ func _run_v1_test() -> void:
 ## impossible — sans rien casser visiblement. On vérifie donc qu'un chemin
 ## existe réellement, avec le même A* que la Veilleuse, du point de départ du
 ## joueur vers chaque objectif.
+## Une sauvegarde d'avant la campagne doit survivre à la mise à jour.
+##
+## C'est le test le plus ingrat et le plus nécessaire du lot : une migration
+## ratée ne se voit pas — le jeu démarre, tout a l'air normal, et le joueur a
+## simplement perdu les quatorze documents qu'il avait mis des heures à
+## retrouver. On fabrique donc une vraie sauvegarde v1.1.0 et on vérifie
+## qu'elle traverse.
+func _run_sauve_test() -> void:
+	await get_tree().process_frame
+	var ok := true
+	var f := GameState.FICHIER_PROGRESSION
+
+	# --- une sauvegarde v1.1.0 telle qu'elle existe chez un joueur ---
+	# Pas de section [meta], pas de [campagne] : ces clés n'existaient pas.
+	var vieux := ConfigFile.new()
+	var lus := ["plaque_service", "note_eclairage", "registre_admissions",
+			"fiche_veilleuse", "lacaze_theorie"]
+	vieux.set_value("documents", "lus", lus)
+	vieux.set_value("didacticiel", "souffle", true)
+	vieux.set_value("records", "meilleur_1", 412.5)
+	vieux.set_value("reprise", "fusibles", 0)
+	vieux.set_value("reprise", "temps", 0.0)
+	vieux.save(f)
+	print("SAUVE  v1.1.0 fabriquee : %d documents, record 412.5 en Patient" % lus.size())
+
+	# --- on rejoue le chargement de l'autoload sur ce fichier ---
+	GameState.oublier_tout()
+	GameState.etage_atteint = 0
+	GameState.etages_termines.clear()
+	var c := ConfigFile.new()
+	c.load(f)
+	GameState.souffle_appris = bool(c.get_value("didacticiel", "souffle", false))
+	for id in c.get_value("documents", "lus", []):
+		GameState.documents_lus[id] = true
+	GameState._migrer(c)
+
+	# 1. rien n'est perdu
+	print("SAUVE  documents : %d (attendu %d)  didacticiel : %s (attendu true)"
+			% [GameState.documents_acquis(), lus.size(), GameState.souffle_appris])
+	if GameState.documents_acquis() != lus.size() or not GameState.souffle_appris:
+		ok = false
+
+	# 2. la campagne sait que l'etage -1 a ete vu et termine
+	var premier := Etages.premier()
+	print("SAUVE  etage_atteint = %d (attendu %d)  etage %d termine : %s (attendu true)"
+			% [GameState.etage_atteint, premier, premier,
+			   GameState.etages_termines.has(premier)])
+	if GameState.etage_atteint != premier or not GameState.etages_termines.has(premier):
+		ok = false
+
+	# 3. le record est reporte sur l'etage, sans etre retire de sa vieille cle
+	var relu := ConfigFile.new()
+	relu.load(f)
+	var report := float(relu.get_value("records", "etage_%d_1" % premier, 0.0))
+	var ancien := float(relu.get_value("records", "meilleur_1", 0.0))
+	print("SAUVE  record : etage_%d_1 = %.1f (attendu 412.5)  ancienne cle conservee = %.1f"
+			% [premier, report, ancien])
+	if absf(report - 412.5) > 0.01 or absf(ancien - 412.5) > 0.01:
+		ok = false
+
+	# 4. la version est posee, donc la migration ne repassera pas
+	var v := int(relu.get_value("meta", "version", 1))
+	print("SAUVE  version = %d (attendu %d)" % [v, GameState.VERSION_SAUVEGARDE])
+	if v != GameState.VERSION_SAUVEGARDE:
+		ok = false
+
+	# 5. rejouer la migration ne doit RIEN changer : elle doit etre idempotente,
+	#    sinon chaque demarrage rebrasse la sauvegarde.
+	var avant_doc := GameState.documents_acquis()
+	GameState._migrer(relu)
+	if GameState.documents_acquis() != avant_doc:
+		print("SAUVE  ECHEC : la migration n'est pas idempotente")
+		ok = false
+	else:
+		print("SAUVE  migration idempotente : oui")
+
+	# 6. une sauvegarde v2 ecrite par-dessus ne perd pas les sections voisines
+	GameState.etage_courant = premier
+	GameState._ecrire_campagne()
+	var apres := ConfigFile.new()
+	apres.load(f)
+	var garde := (apres.get_value("documents", "lus", []) as Array).size()
+	print("SAUVE  apres ecriture campagne : %d documents encore la (attendu %d)"
+			% [garde, lus.size()])
+	if garde != lus.size():
+		print("SAUVE  ECHEC : ecrire la campagne a efface les documents")
+		ok = false
+
+	print("SAUVE RESULTAT : %s" % ("OK" if ok else "ECHEC"))
+	get_tree().quit(0 if ok else 1)
+
+
 func _run_seed_check() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame

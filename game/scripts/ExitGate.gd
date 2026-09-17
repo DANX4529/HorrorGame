@@ -1,5 +1,8 @@
 extends Node3D
-## Monte-charge : la sortie. Inutilisable tant que le courant n'est pas revenu.
+## Monte-charge. Inutilisable tant que le courant n'est pas revenu.
+##
+## Il ne fait plus gagner : il DESCEND. C'est le pivot de la campagne — et le
+## seul endroit où ce qu'on a lu devient ce qu'on possède.
 
 func setup(pos: Vector3) -> void:
 	position = pos
@@ -21,8 +24,18 @@ func interact(_who) -> void:
 		GameState.say("La grille est morte. Il faut du courant.", 3.0)
 		Audio.play_3d("locker_close", global_position, -12.0)
 		return
-	GameState.set_phase(GameState.Phase.VICTOIRE)
+	Audio.play_3d("locker_close", global_position, -6.0)
+	GameState.remonter_butin()
+	# La cabine s'ouvre même s'il n'y a plus rien en dessous : c'est elle qui
+	# annonce la fin de la campagne, et le joueur a droit au décompte de son
+	# butin dans les deux cas.
+	GameState.set_phase(GameState.Phase.CABINE)
 
 
 func prompt() -> String:
-	return "Prendre le monte-charge" if GameState.power_restored else "Grille sans courant"
+	if not GameState.power_restored:
+		return "Grille sans courant"
+	var n := GameState.documents_en_cours()
+	if n > 0:
+		return "Descendre  (%d document%s à l'abri)" % [n, "s" if n > 1 else ""]
+	return "Descendre"

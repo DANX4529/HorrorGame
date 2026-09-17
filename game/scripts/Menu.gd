@@ -4,7 +4,8 @@ extends CanvasLayer
 ## Séparés du HUD, qui ne garde que l'affichage en cours de partie et le
 ## post-traitement. Tout est construit par code, comme le reste du projet.
 
-enum Ecran { AUCUN, TITRE, OPTIONS, PAUSE, MORT, VICTOIRE, JOURNAL, DOSSIER, CREDITS }
+enum Ecran { AUCUN, TITRE, OPTIONS, PAUSE, MORT, VICTOIRE, JOURNAL, DOSSIER, CREDITS,
+		CABINE }
 
 const OR := Color(0.87, 0.83, 0.74)
 const GRIS := Color(0.70, 0.72, 0.67)
@@ -191,6 +192,7 @@ func _sur_phase(p: int) -> void:
 		GameState.Phase.PAUSE:   _afficher(Ecran.PAUSE)
 		GameState.Phase.MORT:    _afficher(Ecran.MORT)
 		GameState.Phase.VICTOIRE: _afficher(Ecran.VICTOIRE)
+		GameState.Phase.CABINE:  _afficher(Ecran.CABINE)
 		_:                       _afficher(Ecran.AUCUN)
 
 
@@ -212,6 +214,7 @@ func _afficher(e: Ecran) -> void:
 		Ecran.JOURNAL:  _ecran_journal()
 		Ecran.DOSSIER:  _ecran_dossier()
 		Ecran.CREDITS:  _ecran_credits()
+		Ecran.CABINE:   _ecran_cabine()
 	# Le focus se prend une fois l'écran entièrement construit : on peut alors
 	# traverser tout le menu au clavier (flèches puis Entrée) sans souris.
 	# Appel direct, pas différé : les boutons sont déjà dans l'arbre ici, alors
@@ -323,16 +326,36 @@ func _ecran_pause() -> void:
 func _ecran_mort() -> void:
 	_texte("ELLE VOUS A TROUVÉ", 44, Color(0.78, 0.26, 0.22))
 	_espace(10)
+	# Dire ce qu'on vient de perdre, nommément. Une règle qui coûte sans
+	# jamais s'énoncer se lit comme un bug, pas comme un enjeu.
+	var perdus := GameState.documents_en_cours()
+	if perdus > 0:
+		_texte("%d document%s que vous n'avez pas remonté%s."
+				% [perdus, "s" if perdus > 1 else "", "s" if perdus > 1 else ""],
+				16, Color(0.78, 0.26, 0.22))
+		_texte("Ils sont restés en bas.", 14, SOURD)
+		_espace(8)
 	_releve()
 	_espace(14)
 	if GameState.a_un_point_de_controle():
 		_focus(_bouton("Reprendre au tableau électrique", func():
 			GameState.reprendre()
 			_relancer(false), true))
-		_bouton("Recommencer depuis le début", func(): _relancer())
+		_bouton("Recommencer l'étage", func(): _refaire_etage())
 	else:
-		_focus(_bouton("Recommencer", func(): _relancer(), true))
+		# Même graine : on refait CE plan-ci. Ce qu'on a appris du bâtiment en
+		# mourant sert encore, ce qui est toute la différence entre réessayer
+		# et repartir de zéro.
+		_focus(_bouton("Recommencer l'étage", func(): _refaire_etage(), true))
 	_bouton("Retour au titre", func(): _retour_titre())
+
+
+## Refait l'étage courant à l'identique. Le butin est déjà perdu : reset_run()
+## vide documents_en_main à chaque reconstruction du monde.
+func _refaire_etage() -> void:
+	GameState.effacer_point_de_controle()
+	GameState.montrer_prologue = false
+	_relancer(false)
 
 
 func _ecran_victoire() -> void:
@@ -348,6 +371,59 @@ func _ecran_victoire() -> void:
 	_espace(14)
 	_focus(_bouton("Rejouer", func(): _relancer(), true))
 	_bouton("Retour au titre", func(): _retour_titre())
+
+
+## La cabine du monte-charge : le seul endroit où le butin devient acquis.
+##
+## L'écran existe pour rendre la règle VISIBLE. Le joueur doit voir, noir sur
+## blanc, que ce qu'il portait vient d'être mis à l'abri — sinon « perdre ce
+## qu'on n'a pas remonté » n'est qu'une punition arbitraire découverte trop
+## tard. C'est aussi le seul temps mort de la descente : la seule respiration.
+func _ecran_cabine() -> void:
+	var def := GameState.etage_def()
+	var dessous := Etages.etage(Etages.suivant(GameState.etage_courant))
+	_texte("LE MONTE-CHARGE DESCEND", 34, OR)
+	_espace(8)
+	_texte("Niveau %d   —   %s" % [GameState.etage_courant,
+			str(def.get("titre", ""))], 15, SOURD)
+	_espace(14)
+
+	var butin := GameState.butin_remonte
+	if butin > 0:
+		_texte("%d document%s mis à l'abri" % [butin, "s" if butin > 1 else ""],
+				17, OR)
+	else:
+		_texte("Vous remontez les mains vides.", 15, GRIS)
+	_texte("Archive : %d sur %d" % [GameState.documents_acquis(), Lore.total()],
+			14, SOURD)
+	_espace(16)
+
+	if dessous.is_empty():
+		_texte("Il n'y a plus rien en dessous.", 15, GRIS)
+		_espace(12)
+		_focus(_bouton("Remonter", func():
+			GameState.set_phase(GameState.Phase.VICTOIRE), true))
+		return
+
+	_texte("Niveau %d   —   %s" % [int(dessous["niveau"]),
+			str(dessous.get("titre", ""))], 19, OR)
+	_espace(6)
+	_texte("Plus bas, elle entend mieux.", 14, SOURD)
+	_espace(14)
+	_focus(_bouton(Tactile.libelle("Descendre", "Descendre"), func():
+		_descendre(), true))
+	_bouton("Retour au titre", func(): _retour_titre())
+
+
+func _descendre() -> void:
+	if not GameState.descendre_etage():
+		GameState.set_phase(GameState.Phase.VICTOIRE)
+		return
+	# Même protocole que _relancer() : rien ne s'exécute après un rechargement
+	# de scène, donc l'intention transite par l'autoload et Main la consomme.
+	GameState.demarrer_en_jeu = true
+	get_tree().paused = false
+	get_tree().reload_current_scene()
 
 
 ## Relevé de partie, commun à la mort et à la victoire.
@@ -418,23 +494,33 @@ func _ecran_credits() -> void:
 ## restent acquises. C'est ce qui donne au joueur une raison de redescendre.
 func _ecran_journal() -> void:
 	_texte("CE QU'ON A RETROUVÉ", 34, OR)
-	_texte("%d documents sur %d" % [GameState.documents_trouves(), Lore.total()],
+	_texte("%d documents sur %d" % [GameState.documents_acquis(), Lore.total()],
 			14, SOURD)
+	var en_main := GameState.documents_en_cours()
+	if en_main > 0:
+		# Dire ce qu'on risque, et le dire AVANT de mourir. Une règle punitive
+		# qu'on découvre après coup n'est pas de la tension.
+		_texte("%d en main — perdu%s si vous ne remontez pas"
+				% [en_main, "s" if en_main > 1 else ""], 14, OR)
 	_espace(12)
 
 	for n in Lore.chapitres():
 		var docs: Array = Lore.du_chapitre(n)
 		var lus := 0
 		for d in docs:
-			if GameState.a_lu(str(d["id"])):
+			if GameState.a_acquis(str(d["id"])):
 				lus += 1
 		_espace(8)
 		_texte("%s   —   %d/%d" % [Lore.CHAPITRES[n], lus, docs.size()],
 				17, OR if lus > 0 else SOURD)
 		for d in docs:
 			var id := str(d["id"])
-			if GameState.a_lu(id):
+			if GameState.a_acquis(id):
 				_bouton("   " + str(d["titre"]), func(): _ouvrir_dossier(id))
+			elif GameState.documents_en_main.has(id):
+				# lu, mais pas encore ressorti avec : lisible, et marqué
+				_bouton("   %s   (en main)" % str(d["titre"]),
+						func(): _ouvrir_dossier(id))
 			else:
 				# une entrée jamais trouvée reste visible mais muette : le joueur
 				# sait qu'il lui manque quelque chose, sans savoir quoi
@@ -477,11 +563,12 @@ func _retour_titre() -> void:
 ## par le rechargement. L'intention est donc posée dans GameState, que Main
 ## relit à la fin de sa construction.
 func _relancer(nouvelle := true) -> void:
-	# Toute relance qui n'est pas une reprise ouvre une NOUVELLE descente :
-	# autre graine, donc autre sous-sol. Une reprise, elle, doit retrouver le
-	# sien intact — d'où le paramètre plutôt qu'un tirage implicite.
+	# Toute relance qui n'est pas une reprise ouvre une NOUVELLE campagne :
+	# on repart de l'étage le plus haut, avec une autre graine. Une reprise,
+	# elle, doit retrouver son plan intact — d'où le paramètre plutôt qu'un
+	# tirage implicite.
 	if nouvelle:
-		GameState.nouvelle_descente()
+		GameState.nouvelle_campagne()
 	GameState.demarrer_en_jeu = true
 	GameState.set_phase(GameState.Phase.TITRE, true)
 	get_tree().reload_current_scene()
