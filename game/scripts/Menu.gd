@@ -432,7 +432,8 @@ func _releve() -> void:
 	var lignes := [
 		["Temps", _mmss(GameState.time_survived)],
 		["Difficulté", Settings.nom_difficulte()],
-		["Fusibles posés", "%d / %d" % [GameState.fuses_installed, GameState.FUSES_REQUIRED]],
+		[GameState.objectif_panneau, "%d / %d" % [GameState.fuses_installed,
+				GameState.objectif_nombre]],
 		["Distance parcourue", "%d m" % int(s.get("distance", 0.0))],
 		["Fois où elle vous a entendu", "%d" % int(s.get("detections", 0.0))],
 		["Traques déclenchées", "%d" % int(s.get("chasses", 0.0))],

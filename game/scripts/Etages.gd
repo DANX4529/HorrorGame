@@ -61,6 +61,16 @@ const ETAGES := [
 		],
 		"lettres_beton": ["T", "M", "R"],
 		"cellule_tableau": Vector2i(10, 8),
+		# On arrive par l'escalier, dans le hall.
+		"depart": Vector2i(3, 9),
+		"depart_ecart": Vector3(0.8, 0.0, 0.8),
+		# Ces trois listes étaient des valeurs par défaut dans LevelBuilder.
+		# Elles sont écrites ici parce que leur ORDRE est tiré au sort avec la
+		# graine : laissées ailleurs, elles décideraient du placement d'un étage
+		# depuis un fichier qui ne parle pas de lui.
+		"ronde": ["C", "D", "E", "S", "A", "W", "R"],
+		"ailes": ["D", "E", "S", "A", "W", "R"],
+		"piles": ["C", "H", "D", "E", "S", "R"],
 		"objectif": {
 			"nombre": 4,
 			"objet": "Fusible céramique",
@@ -69,6 +79,68 @@ const ETAGES := [
 		"sols": {},
 		"veilleuse": {},
 		"lampe": true,
+	},
+	{
+		"niveau": -2,
+		"titre": "Le pavillon C",
+		"chapitres": [4],
+
+		# Le pavillon où « l'incident » a eu lieu. Deux anneaux empilés plutôt
+		# qu'un seul : on peut toujours la contourner, mais il faut choisir PAR
+		# OÙ, et les deux couloirs transversaux sont des pièges à mi-parcours.
+		#
+		# .  maçonnerie pleine     C  couloir          D,E  dortoirs
+		# P  salle commune         G  poste de garde   R    lingerie
+		# A  archives              T  local technique  M    monte-charge
+		"carte": [
+			".............",
+			".DDD.PPP.EE..",
+			".DDD.PPP.EE..",
+			".CCCCCCCCCC..",
+			".C...GG...C..",
+			".C...GG...C..",
+			".CCCCCCCCCC..",
+			".C...RR...C..",
+			".C...RR...C..",
+			".CCCCCCCCCC..",
+			".AAA...TTM...",
+			".............",
+		],
+		"portes": [
+			[2, 2, "S"],            # dortoir D -> couloir haut
+			[6, 2, "S"],            # salle commune -> couloir haut
+			[9, 2, "S"],            # dortoir E -> couloir haut
+			[5, 4, "N"],            # poste de garde -> couloir haut
+			[5, 7, "N"],            # lingerie -> couloir milieu
+			[2, 10, "N"],           # archives -> couloir bas
+			[7, 10, "N"],           # local technique -> couloir bas
+		],
+		"ouvertures": [
+			[9, 10, "W"],           # local technique -> monte-charge
+		],
+		"lettres_beton": ["T", "M", "R"],
+		"cellule_tableau": Vector2i(7, 10),
+		"veilleuses": [
+			Vector2i(1, 3), Vector2i(10, 3), Vector2i(1, 6), Vector2i(10, 6),
+			Vector2i(1, 9), Vector2i(10, 9), Vector2i(2, 10), Vector2i(6, 1),
+			Vector2i(9, 1),
+		],
+		# On arrive par la cabine : le joueur se réveille où il est descendu.
+		"depart": Vector2i(8, 10),
+		"depart_ecart": Vector3(0.7, 0.0, 0.7),
+		"ronde": ["C", "D", "E", "P", "G", "R", "A"],
+		"ailes": ["D", "E", "P", "G", "R", "A"],
+		"piles": ["C", "D", "E", "P", "R"],
+		"objectif": {
+			"nombre": 3,
+			"objet": "Disjoncteur",
+			"pluriel": "disjoncteurs",
+			"panneau": "Armoire électrique",
+		},
+		"sols": {},
+		"veilleuse": {},
+		"lampe": true,
+		"jetables": 7,
 	},
 ]
 

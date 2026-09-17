@@ -51,18 +51,19 @@ func interact(_who) -> void:
 		GameState.say("Le courant est rétabli. Le monte-charge attend.", 3.0)
 		return
 	if GameState.fuses_held <= 0:
-		GameState.say("Il manque %d fusibles céramiques." %
-				(GameState.FUSES_REQUIRED - GameState.fuses_installed), 3.0)
+		GameState.say("Il manque %d %s." % [
+				GameState.objectif_nombre - GameState.fuses_installed,
+				GameState.objectif_pluriel], 3.0)
 		return
 	var n := GameState.install_fuses()
 	installed = GameState.fuses_installed
 	GameState.poser_point_de_controle()
 	Audio.noise_3d("fuse_insert", global_position, "fusible", -4.0)
-	if installed >= GameState.FUSES_REQUIRED:
+	if installed >= GameState.objectif_nombre:
 		_power_up()
 	else:
-		GameState.say("%d fusible(s) posé(s). %d manquant(s)." %
-				[n, GameState.FUSES_REQUIRED - installed], 3.5)
+		GameState.say("%d posé(s). %d manquant(s)." %
+				[n, GameState.objectif_nombre - installed], 3.5)
 
 
 func _power_up() -> void:
@@ -79,5 +80,6 @@ func prompt() -> String:
 	if GameState.power_restored:
 		return "Tableau alimenté"
 	if GameState.fuses_held > 0:
-		return "Poser %d fusible(s)" % GameState.fuses_held
-	return "Tableau électrique (%d/%d)" % [GameState.fuses_installed, GameState.FUSES_REQUIRED]
+		return "Poser %d pièce(s)" % GameState.fuses_held
+	return "%s (%d/%d)" % [GameState.objectif_panneau, GameState.fuses_installed,
+			GameState.objectif_nombre]

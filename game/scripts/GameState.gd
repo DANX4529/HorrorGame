@@ -12,7 +12,14 @@ signal phase_changed(p: Phase)
 signal fuses_changed(n: int, total: int)
 signal message(txt: String, secs: float)
 
-const FUSES_REQUIRED := 4
+## L'objectif de l'étage courant. La FORME ne change pas d'un étage à l'autre
+## — réunir n pièces, les poser, sortir — seuls le compte et les mots changent.
+## C'est délibéré : ce qui distingue les étages, ce sont leurs mécaniques, pas
+## une errance réinventée à chaque fois qu'il faudrait réapprendre.
+var objectif_nombre := 4
+var objectif_objet := "Fusible céramique"
+var objectif_pluriel := "fusibles céramiques"
+var objectif_panneau := "Tableau électrique"
 
 var phase: Phase = Phase.TITRE
 var fuses_held := 0
@@ -111,6 +118,7 @@ const ACTIONS := {
 	"crouch":       [KEY_C],
 	"interact":     [KEY_E, KEY_SPACE],
 	"flashlight":   [KEY_F],
+	"lancer":       [KEY_G],
 	"pause":        [KEY_ESCAPE],
 	"restart":      [KEY_R],
 }
@@ -180,7 +188,14 @@ func reset_run() -> void:
 	fuses_installed = reprise_fusibles
 	# reprendre avec tous les fusibles posés veut dire que le courant était
 	# déjà revenu : sans ça le tableau deviendrait inutilisable.
-	power_restored = reprise_fusibles >= FUSES_REQUIRED
+	# L'objectif suit l'étage. Lu AVANT de comparer les fusibles repris, sinon
+	# une reprise se mesurerait au barème de l'étage précédent.
+	var obj: Dictionary = etage_def().get("objectif", {})
+	objectif_nombre = int(obj.get("nombre", 4))
+	objectif_objet = str(obj.get("objet", "Fusible céramique"))
+	objectif_pluriel = str(obj.get("pluriel", "fusibles céramiques"))
+	objectif_panneau = str(obj.get("panneau", "Tableau électrique"))
+	power_restored = reprise_fusibles >= objectif_nombre
 	time_survived = reprise_temps
 	stats = {"detections": 0, "chasses": 0, "cachettes": 0, "haletements": 0,
 			"distance": 0.0, "portes": 0, "piles": 0}
@@ -383,15 +398,16 @@ func enregistrer_temps(t: float) -> bool:
 
 func add_fuse() -> void:
 	fuses_held += 1
-	fuses_changed.emit(fuses_installed, FUSES_REQUIRED)
-	say("Fusible céramique récupéré  (%d/%d)" % [fuses_held + fuses_installed, FUSES_REQUIRED], 3.0)
+	fuses_changed.emit(fuses_installed, objectif_nombre)
+	say("%s récupéré  (%d/%d)" % [objectif_objet,
+			fuses_held + fuses_installed, objectif_nombre], 3.0)
 
 
 func install_fuses() -> int:
 	var n := fuses_held
 	fuses_installed += n
 	fuses_held = 0
-	fuses_changed.emit(fuses_installed, FUSES_REQUIRED)
+	fuses_changed.emit(fuses_installed, objectif_nombre)
 	return n
 
 

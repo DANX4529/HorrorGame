@@ -44,9 +44,12 @@ var dbg_bruit := -1.0
 var dbg_menace := -1.0
 var dbg_lore := false
 var dbg_sauve := false
+var dbg_jet := false
+var dbg_etages := false
 var dbg_doc := ""
 var dbg_tpdoc := -1
 var dbg_seed := 0
+var dbg_etage := 0
 var dbg_seedreport := false
 var dbg_seedcheck := false
 var dbg_verbose := false
@@ -123,10 +126,16 @@ func _parse_cmdline() -> void:
 			dbg_lore = true
 		elif args[i] == "--sauvetest":
 			dbg_sauve = true
+		elif args[i] == "--jettest":
+			dbg_jet = true
+		elif args[i] == "--etagetest":
+			dbg_etages = true
 		elif args[i] == "--doc" and i + 1 < args.size():
 			dbg_doc = args[i + 1]
 		elif args[i] == "--tpdoc" and i + 1 < args.size():
 			dbg_tpdoc = int(args[i + 1])
+		elif args[i] == "--etage" and i + 1 < args.size():
+			dbg_etage = int(args[i + 1])
 		elif args[i] == "--seed" and i + 1 < args.size():
 			dbg_seed = int(args[i + 1])
 		elif args[i] == "--seedreport":
@@ -163,6 +172,9 @@ func _build_world() -> void:
 		DirAccess.remove_absolute(GameState.FICHIER_PROGRESSION)
 		GameState.oublier_tout()
 		GameState.souffle_appris = false
+	# l'étage demandé doit être choisi AVANT reset_run(), qui y lit l'objectif
+	if dbg_etage != 0:
+		GameState.etage_courant = dbg_etage
 	# l'état de reprise doit être connu AVANT de semer les fusibles
 	GameState.reset_run()
 
@@ -253,6 +265,10 @@ func _build_world() -> void:
 		_run_lore_test()
 	if dbg_sauve:
 		_run_sauve_test()
+	if dbg_jet:
+		_run_jet_test()
+	if dbg_etages:
+		_run_etages_test()
 	if dbg_v1:
 		_run_v1_test()
 	if dbg_tactiletest:
@@ -449,6 +465,21 @@ func _spawn_pickups() -> void:
 		holder.add_child(n)
 		n.setup("battery", bat_scene, p)
 
+	# Les morceaux de plâtre vivent dans leur propre noeud pour la même raison
+	# que les documents : le parcours des objectifs lit `kind` sur chaque enfant
+	# de Pickups, et un jetable n'en a pas.
+	var debris_scene: PackedScene = load("res://assets/models/props/debris.glb")
+	if player:
+		player.set_jetable_scene(debris_scene)
+	if not level.jetable_spawns.is_empty():
+		var jets := Node3D.new()
+		jets.name = "Jetables"
+		add_child(jets)
+		for p in level.jetable_spawns:
+			var n := preload("res://scripts/Jetable.gd").new()
+			jets.add_child(n)
+			n.setup(debris_scene, p + Vector3(0, 0.18, 0), true)
+
 	# Les documents du récit vivent dans leur PROPRE noeud, pas parmi les
 	# ramassables. Mêlés à eux, ils cassaient le parcours des objectifs, qui
 	# lisait `kind` sur chaque enfant — une propriété qu'un document n'a pas.
@@ -551,7 +582,7 @@ func _run_objective_test() -> void:
 				% [n, holder.global_position.x, holder.global_position.z, reachable])
 		if not reachable:
 			ok = false
-	print("RUNGAME  en main : %d / %d" % [GameState.fuses_held, GameState.FUSES_REQUIRED])
+	print("RUNGAME  en main : %d / %d" % [GameState.fuses_held, GameState.objectif_nombre])
 
 	var fb = get_tree().get_first_node_in_group("fusebox")
 	if fb == null:
@@ -1813,6 +1844,244 @@ func _run_v1_test() -> void:
 ## impossible — sans rien casser visiblement. On vérifie donc qu'un chemin
 ## existe réellement, avec le même A* que la Veilleuse, du point de départ du
 ## joueur vers chaque objectif.
+## Chaque étage déclaré tient-il debout ?
+##
+## Un étage est de la donnée écrite à la main, et la plupart de ses fautes ne
+## lèvent rien : une lettre de salle sans fonction d'habillage donne une pièce
+## vide, un objectif sans pièces donne un étage infinissable, une case de
+## départ dans un mur donne un joueur coincé. Rien de tout ça ne plante — on le
+## découvre en y jouant, ou pire, le joueur le découvre.
+##
+## Ce test ne bâtit pas les niveaux (--seedcheck s'en charge) : il relit la
+## table. C'est donc instantané, et ça attrape la faute de frappe le jour où
+## elle est écrite.
+func _run_etages_test() -> void:
+	await get_tree().process_frame
+	var ok := true
+	var connues := ["C", "D", "E", "S", "A", "H", "R", "T", "M", "W", "P", "G"]
+	var vus := {}
+
+	print("ETAGES  %d etage(s) declare(s)" % Etages.total())
+	for e in Etages.ETAGES:
+		var niv := int(e["niveau"])
+		var nom := str(e["titre"])
+		var carte: Array = e["carte"]
+
+		# 1. niveaux uniques et negatifs : le niveau est la cle de sauvegarde
+		if vus.has(niv):
+			print("ETAGES  ECHEC : le niveau %d est declare deux fois" % niv)
+			ok = false
+		vus[niv] = true
+		if niv >= 0:
+			print("ETAGES  ECHEC : %s a le niveau %d, attendu negatif" % [nom, niv])
+			ok = false
+
+		# 2. grille reguliere
+		var larg: int = (carte[0] as String).length()
+		var regulier := true
+		for l in carte:
+			if (l as String).length() != larg:
+				regulier = false
+		# 3. lettres toutes habillees
+		var lettres := {}
+		for y in carte.size():
+			for x in larg:
+				var c: String = (carte[y] as String)[x]
+				if c != ".":
+					lettres[c] = true
+		var inconnues := []
+		for c in lettres:
+			if not (c in connues):
+				inconnues.append(c)
+
+		# 4. les cases indispensables existent
+		var a_sortie: bool = lettres.has("M")
+		var tab: Vector2i = e["cellule_tableau"]
+		var dep: Vector2i = e.get("depart", Vector2i(3, 9))
+		var dans := func(c: Vector2i) -> bool:
+			return c.y >= 0 and c.y < carte.size() and c.x >= 0 and c.x < larg
+		var lettre_de := func(c: Vector2i) -> String:
+			return (carte[c.y] as String)[c.x]
+		var tab_ok: bool = dans.call(tab) and lettre_de.call(tab) != "."
+		var dep_ok: bool = dans.call(dep) and lettre_de.call(dep) != "."
+
+		# 5. assez d'ailes pour semer l'objectif
+		var obj: Dictionary = e.get("objectif", {})
+		var n_obj := int(obj.get("nombre", 0))
+		var ailes: Array = e.get("ailes", [])
+		var ailes_presentes := 0
+		for a in ailes:
+			if lettres.has(a):
+				ailes_presentes += 1
+
+		print("ETAGES  %-3d %-24s grille %dx%d  salles %s  objectif %d dans %d aile(s)"
+				% [niv, nom, larg, carte.size(), "".join(lettres.keys()),
+				   n_obj, ailes_presentes])
+		if not regulier:
+			print("ETAGES  ECHEC : %s a une grille irreguliere" % nom)
+			ok = false
+		if not inconnues.is_empty():
+			print("ETAGES  ECHEC : %s emploie %s, sans fonction d'habillage"
+					% [nom, str(inconnues)])
+			ok = false
+		if not a_sortie:
+			print("ETAGES  ECHEC : %s n'a pas de monte-charge" % nom)
+			ok = false
+		if not tab_ok:
+			print("ETAGES  ECHEC : %s a son tableau en %s, hors du plan" % [nom, tab])
+			ok = false
+		if not dep_ok:
+			print("ETAGES  ECHEC : %s fait apparaitre le joueur en %s, dans un mur"
+					% [nom, dep])
+			ok = false
+		if n_obj <= 0:
+			print("ETAGES  ECHEC : %s n'a pas d'objectif" % nom)
+			ok = false
+		elif ailes_presentes < n_obj:
+			print("ETAGES  ECHEC : %s veut %d pieces mais n'a que %d aile(s) : elles se poseraient a plusieurs dans la meme salle"
+					% [nom, n_obj, ailes_presentes])
+			ok = false
+
+	# 6. la chaine des etages se parcourt d'un bout a l'autre
+	var n := Etages.premier()
+	var vus_chaine := 1
+	while Etages.suivant(n) != 0:
+		n = Etages.suivant(n)
+		vus_chaine += 1
+	print("ETAGES  chaine : de %d a %d, %d etage(s) atteignable(s) de suite"
+			% [Etages.premier(), n, vus_chaine])
+	if vus_chaine != Etages.total():
+		print("ETAGES  ECHEC : %d etages declares mais %d dans la chaine — un trou de numerotation les rend inatteignables"
+				% [Etages.total(), vus_chaine])
+		ok = false
+
+	print("ETAGES RESULTAT : %s" % ("OK" if ok else "ECHEC"))
+	get_tree().quit(0 if ok else 1)
+
+
+## Le verbe « jeter » fait-il ce pour quoi il existe ?
+##
+## Jeter n'a d'intérêt que si le bruit se produit LÀ OÙ L'OBJET TOMBE et si ça
+## l'envoie là-bas. Un projectile qui sonnerait au départ déplacerait la
+## Veilleuse vers le joueur — l'exact contraire du verbe, et personne ne s'en
+## apercevrait en jouant : on verrait juste qu'elle arrive, comme d'habitude.
+func _run_jet_test() -> void:
+	GameState.set_phase(GameState.Phase.JEU)
+	await get_tree().create_timer(0.4).timeout
+	var ok := true
+
+	# --- 1. le rayon "objet" existe et dépasse le seuil de chasse ---
+	var r_objet: float = NoiseBus.R.get("objet", 0.0)
+	print("JET  rayon objet = %.1f m   seuil de chasse = %.1f m"
+			% [r_objet, Veilleuse.SEUIL_CHASSE])
+	if r_objet < Veilleuse.SEUIL_CHASSE:
+		print("JET  ECHEC : un jet ne la lancerait pas, il l'intriguerait")
+		ok = false
+
+	# --- 2. ramasser, et pas plus que les mains n'en tiennent ---
+	player.jetables = 0
+	var pris := 0
+	for i in Player.JETABLES_MAX + 2:
+		if player.ramasser_jetable():
+			pris += 1
+	print("JET  ramasses : %d (plafond %d)" % [pris, Player.JETABLES_MAX])
+	if pris != Player.JETABLES_MAX:
+		ok = false
+
+	# --- 3. le bruit se fait à l'impact, loin du joueur ---
+	#
+	# On écoute le SIGNAL plutôt que NoiseBus.last : cet historique est un
+	# tampon circulaire de 24 entrées, et la respiration du joueur en émet une
+	# par frame physique. Le bruit du jet en serait chassé avant qu'on le lise,
+	# et le test échouerait en accusant le jeu d'un défaut qui serait le sien.
+	var jets: Array = []
+	var ecoute := func(pos: Vector3, rayon: float, genre: String) -> void:
+		if genre == "objet":
+			jets.append({"pos": pos, "r": rayon})
+	NoiseBus.noise.connect(ecoute)
+
+	# Un couloir dégagé, ET son axe. On cherche la plus longue enfilade de
+	# couloir du plan plutôt que d'en désigner une : la première case "C" venue
+	# est souvent un angle, avec un mur à trois mètres — on mesurerait alors la
+	# distance jusqu'au mur en croyant mesurer la portée d'un jet. Et le test
+	# doit valoir pour les étages qui n'existent pas encore.
+	var dirs := [Vector2i(0, -1), Vector2i(0, 1), Vector2i(-1, 0), Vector2i(1, 0)]
+	var caps := [0.0, PI, PI * 0.5, -PI * 0.5]   # cap 0 = vers les z décroissants
+	var best_cell := Vector2i.ZERO
+	var best_dir := 0
+	var best_len := -1
+	for cell in level._cells:
+		if level._cells[cell] != "C":
+			continue
+		for k in dirs.size():
+			var n := 0
+			var c: Vector2i = cell
+			while level._cells.get(c + dirs[k], "") == "C":
+				c += dirs[k]
+				n += 1
+			if n > best_len:
+				best_len = n
+				best_cell = cell
+				best_dir = k
+	print("JET  enfilade retenue : %s vers %s, %d cases (%.0f m)"
+			% [best_cell, dirs[best_dir], best_len, best_len * level.CELL])
+	var depart: Vector3 = level.world_of(best_cell.x, best_cell.y)
+	player.global_position = depart
+	player.set_look(caps[best_dir], 0.0)
+	await get_tree().physics_frame
+	depart = player.global_position
+	player.jeter()
+	await get_tree().create_timer(2.5).timeout
+	NoiseBus.noise.disconnect(ecoute)
+
+	var impact := Vector3.INF
+	if jets.is_empty():
+		print("JET  ECHEC : aucun bruit 'objet' emis")
+		ok = false
+	else:
+		impact = jets[0]["pos"]
+		var d: float = depart.distance_to(impact)
+		print("JET  impact a %.2f m du lanceur  (%.1f, %.1f)  rayon %.1f m"
+				% [d, impact.x, impact.z, jets[0]["r"]])
+		# 4 m : un jet dégagé porte à une petite dizaine de mètres. Sous quatre,
+		# soit l'objet tombe sur les pieds du lanceur, soit il ne franchit même
+		# pas la case voisine — dans les deux cas le verbe ne sert à rien, et
+		# c'est exactement ce qu'on veut empêcher de livrer sans s'en rendre
+		# compte.
+		if d < 4.0:
+			print("JET  ECHEC : le bruit se fait sur le joueur, pas a l'impact")
+			ok = false
+
+	# --- 4. un seul bruit par jet ---
+	print("JET  bruits 'objet' pour un jet : %d (attendu 1)" % jets.size())
+	if jets.size() != 1:
+		print("JET  ECHEC : un objet qui roule la tire d'un point a l'autre")
+		ok = false
+
+	# --- 5. et ça l'envoie là-bas ---
+	if veilleuse and impact != Vector3.INF:
+		veilleuse.global_position = depart + Vector3(3.0, 0, 0)
+		veilleuse._spawn_grace = 0.0
+		veilleuse._enter(Veilleuse.Etat.PATROUILLE)
+		await get_tree().physics_frame
+		# On lit la cible SANS laisser passer de frame physique. Le signal de
+		# NoiseBus est synchrone, donc _on_noise a déjà tourné ici — alors
+		# qu'une frame de plus ferait intervenir la traque libre : une fois
+		# lancée et le joueur à moins de 9 m, elle le suit directement, sans
+		# bruit. C'est voulu, et ça masquerait ce qu'on mesure.
+		NoiseBus.emit_kind(impact, "objet")
+		var etat: int = veilleuse.etat
+		var vers: float = veilleuse._target.distance_to(impact)
+		print("JET  elle passe en %s, cible a %.2f m de l'impact"
+				% [_nom_etat(etat), vers])
+		if etat != Veilleuse.Etat.CHASSE or vers > 0.5:
+			print("JET  ECHEC : le jet ne l'envoie pas au point d'impact")
+			ok = false
+
+	print("JET RESULTAT : %s" % ("OK" if ok else "ECHEC"))
+	get_tree().quit(0 if ok else 1)
+
+
 ## Une sauvegarde d'avant la campagne doit survivre à la mise à jour.
 ##
 ## C'est le test le plus ingrat et le plus nécessaire du lot : une migration
@@ -1931,9 +2200,9 @@ func _run_seed_check() -> void:
 			if g != depart and veilleuse._astar.get_id_path(depart, g).is_empty():
 				pbs.append("%s injoignable" % nom)
 
-		if level.fuse_spawns.size() != GameState.FUSES_REQUIRED:
+		if level.fuse_spawns.size() != GameState.objectif_nombre:
 			pbs.append("%d fusibles au lieu de %d"
-					% [level.fuse_spawns.size(), GameState.FUSES_REQUIRED])
+					% [level.fuse_spawns.size(), GameState.objectif_nombre])
 		for i in level.fuse_spawns.size():
 			joignable.call(level.fuse_spawns[i], "fusible %d" % (i + 1))
 

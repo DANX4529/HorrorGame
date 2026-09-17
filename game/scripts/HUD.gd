@@ -249,8 +249,8 @@ func _refresh_objective() -> void:
 	if GameState.power_restored:
 		_obj_lbl.text = "OBJECTIF  ▸  Rejoindre le monte-charge"
 	else:
-		_obj_lbl.text = "OBJECTIF  ▸  Fusibles  %d/%d posés   (en main : %d)" % [
-				inst, GameState.FUSES_REQUIRED, held]
+		_obj_lbl.text = "OBJECTIF  ▸  %s  %d/%d posés   (en main : %d)" % [
+				GameState.objectif_panneau, inst, GameState.objectif_nombre, held]
 
 
 func _on_message(txt: String, secs: float) -> void:

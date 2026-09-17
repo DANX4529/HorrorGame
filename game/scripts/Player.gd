@@ -15,6 +15,9 @@ const HAUTEUR_OEIL_ACCROUPI := 0.98
 const HAUTEUR_OEIL_CACHE := 1.34
 const SENSIBILITE := 0.0022
 const PORTEE_INTERACTION := 2.6
+## Combien de morceaux de plâtre on peut porter. Deux, pas dix : le verbe doit
+## rester une décision, pas une mitraillette.
+const JETABLES_MAX := 2
 
 const BATTERIE_MAX := 90.0
 const PAS_INTERVALLE_MARCHE := 0.62
@@ -39,6 +42,7 @@ var _step_t := 0.0
 var _bob := 0.0
 var _shake := 0.0
 var _floor_kind := "lino"
+var jetables := 0
 var _breath_player: AudioStreamPlayer
 var _heart_player: AudioStreamPlayer
 var _breath_stream_name := ""
@@ -270,6 +274,45 @@ func set_look(yaw: float, pitch: float) -> void:
 	cam.rotation.x = _pitch
 
 
+## Ramasse un morceau de plâtre. Faux si les mains sont pleines.
+func ramasser_jetable() -> bool:
+	if jetables >= JETABLES_MAX:
+		GameState.say("Les mains sont pleines.", 2.0)
+		return false
+	jetables += 1
+	GameState.say("Morceau de plâtre  (%d/%d)   [G] pour le jeter"
+			% [jetables, JETABLES_MAX], 3.0)
+	return true
+
+
+## Jette un morceau devant soi. Le bruit se fait à l'impact, pas au lancer :
+## c'est là que la Veilleuse doit aller, pas là où l'on se trouve.
+func jeter() -> void:
+	if jetables <= 0:
+		return
+	jetables -= 1
+	var scn: PackedScene = _jetable_scene
+	if scn == null:
+		return
+	var j = preload("res://scripts/Jetable.gd").new()
+	get_parent().add_child(j)
+	var origine := cam.global_position + cam.global_transform.basis.z * -0.55
+	j.setup(scn, origine, false)
+	# Une composante haute franche : lancé à plat, le morceau touche le sol à
+	# trois mètres et le verbe ne sert à rien. Avec cette gerbe il porte à une
+	# dizaine de mètres, c'est-à-dire assez loin pour qu'elle aille AILLEURS.
+	j.lancer(-cam.global_transform.basis.z + Vector3.UP * 0.36)
+	# le geste lui-même est discret : c'est l'impact qui parle
+	Audio.play_3d("flashlight_click", global_position, -26.0)
+
+
+var _jetable_scene: PackedScene
+
+
+func set_jetable_scene(s: PackedScene) -> void:
+	_jetable_scene = s
+
+
 func set_floor_kind(k: String) -> void:
 	_floor_kind = k
 
@@ -367,6 +410,8 @@ func _on_breath_state(s: int) -> void:
 
 # --------------------------------------------------------------------------
 func _update_torch(delta: float) -> void:
+	if Input.is_action_just_pressed("lancer"):
+		jeter()
 	if Input.is_action_just_pressed("flashlight") and battery > 0.0:
 		torch_on = not torch_on
 		torch.visible = torch_on

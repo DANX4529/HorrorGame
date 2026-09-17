@@ -23,6 +23,11 @@ var lettres_beton: Array = []        ## cases utilisant le kit béton
 var cellule_tableau := Vector2i(-1, -1)
 var sols: Dictionary = {}            ## lettre -> {kind, bruit}
 var etage: Dictionary = {}           ## l'étage en cours de construction
+var depart := Vector2i(3, 9)         ## case où le joueur apparaît
+var depart_ecart := Vector3(0.8, 0.0, 0.8)
+var lettres_ronde: Array = []        ## salles parcourues par la Veilleuse
+var lettres_ailes: Array = []        ## ailes où semer les pièces de l'objectif
+var lettres_piles: Array = []        ## salles où semer les piles
 
 # --------------------------------------------------------------------------
 var _env_scenes: Dictionary = {}
@@ -37,6 +42,7 @@ var nav_total := 0
 var patrol_points: PackedVector3Array = []
 var fuse_spawns: PackedVector3Array = []
 var battery_spawns: PackedVector3Array = []
+var jetable_spawns: PackedVector3Array = []
 ## Documents du récit : [{ "id": String, "pos": Vector3 }, ...]
 var document_spawns: Array[Dictionary] = []
 
@@ -72,6 +78,14 @@ func build(seed_val := 0, etage_def: Dictionary = {}) -> void:
 	lettres_beton = etage["lettres_beton"]
 	cellule_tableau = etage["cellule_tableau"]
 	sols = etage.get("sols", {})
+	depart = etage.get("depart", Vector2i(3, 9))
+	depart_ecart = etage.get("depart_ecart", Vector3(0.8, 0.0, 0.8))
+	# Ces listes sont de la DONNÉE et non une déduction : leur ordre est tiré au
+	# sort avec la graine, si bien que deviner les salles au lieu de les nommer
+	# rebattrait tout le placement d'un étage existant sans que ça se voie.
+	lettres_ronde = etage.get("ronde", ["C", "D", "E", "S", "A", "W", "R"])
+	lettres_ailes = etage.get("ailes", ["D", "E", "S", "A", "W", "R"])
+	lettres_piles = etage.get("piles", ["C", "H", "D", "E", "S", "R"])
 	_valider_etage()
 	_load_scenes()
 	_parse_map()
@@ -381,6 +395,8 @@ func _dress_rooms() -> void:
 			"T":      _dress_technique(props, p, cell)
 			"M":      _dress_monte_charge(props, p, cell)
 			"W":      _dress_eau(props, p, cell)
+			"P":      _dress_commune(props, p, cell)
+			"G":      _dress_garde(props, p, cell)
 			"C":      _dress_couloir(props, p, cell)
 
 
@@ -447,6 +463,40 @@ func _dress_dortoir(p: Node3D, o: Vector3, cell: Vector2i) -> void:
 	if _rng.randf() < 0.6:
 		_prop(p, "debris", o + Vector3(_r(-1.4, 1.4), 0, _r(-1.4, 1.4)), _r(0, TAU))
 	_prop(p, "radiator", o + Vector3(0, 0, -1.88), 0.0)
+
+
+## Salle commune du pavillon : là où les pensionnaires passaient leurs
+## journées. Des chaises en rang face à rien, et ce qu'il en reste.
+func _dress_commune(p: Node3D, o: Vector3, cell: Vector2i) -> void:
+	# les chaises restent alignées comme on les avait laissées, face au mur nord
+	for i in 3:
+		if _rng.randf() < 0.78:
+			_prop(p, "chair", o + Vector3(-1.3 + i * 1.3, 0, _r(-0.2, 0.2)),
+					_r(-0.25, 0.25), Vector3(0.45, 0.95, 0.45))
+	if _rng.randf() < 0.65:
+		_prop(p, "desk", o + Vector3(_r(-1.2, 1.2), 0, 1.35), _r(0, TAU),
+				Vector3(1.35, 0.80, 0.70))
+	if _rng.randf() < 0.5:
+		_prop(p, "wheelchair", o + Vector3(_r(-1.4, 1.4), 0, _r(-1.0, 1.0)),
+				_r(0, TAU), Vector3(0.7, 1.0, 0.9))
+	if _rng.randf() < 0.7:
+		_prop(p, "debris", o + Vector3(_r(-1.5, 1.5), 0, _r(-1.5, 1.5)), _r(0, TAU))
+	_prop(p, "radiator", o + Vector3(0, 0, -1.88), 0.0)
+	_add_locker(p, o + Vector3(-1.68, 0, 1.55), PI * 0.5)
+
+
+## Poste de garde : le bureau depuis lequel on veillait le pavillon. C'est de
+## là que partait la ronde, et c'est là qu'on tenait le registre.
+func _dress_garde(p: Node3D, o: Vector3, cell: Vector2i) -> void:
+	_prop(p, "desk", o + Vector3(0.0, 0, -0.9), _r(-0.08, 0.08),
+			Vector3(1.35, 0.80, 0.70))
+	_prop(p, "chair", o + Vector3(_r(-0.5, 0.5), 0, 0.25), _r(0, TAU),
+			Vector3(0.45, 0.95, 0.45))
+	_prop(p, "cabinet", o + Vector3(-1.55, 0, 1.45), _r(-0.1, 0.1),
+			Vector3(0.76, 1.65, 0.40))
+	if _rng.randf() < 0.85:
+		_prop(p, "papers", o + Vector3(_r(-0.9, 0.9), 0.01, _r(-1.2, 0.2)), _r(0, TAU))
+	_add_locker(p, o + Vector3(1.66, 0, 1.50), -PI * 0.5)
 
 
 func _dress_soins(p: Node3D, o: Vector3, cell: Vector2i) -> void:
@@ -565,8 +615,10 @@ func _build_lights() -> void:
 					Color(1.0, 0.86, 0.62), 1.45, 6.2, _rng.randf() < 0.55)
 
 	# veilleuses de secours, rouges, dans les pièces et aux angles
-	var emergency := [Vector2i(1, 3), Vector2i(10, 3), Vector2i(1, 7), Vector2i(10, 7),
-			Vector2i(3, 8), Vector2i(8, 8), Vector2i(10, 8), Vector2i(4, 1), Vector2i(8, 1)]
+	var emergency: Array = etage.get("veilleuses", [
+			Vector2i(1, 3), Vector2i(10, 3), Vector2i(1, 7), Vector2i(10, 7),
+			Vector2i(3, 8), Vector2i(8, 8), Vector2i(10, 8), Vector2i(4, 1),
+			Vector2i(8, 1)])
 	for cell in emergency:
 		if not _cells.has(cell):
 			continue
@@ -574,9 +626,13 @@ func _build_lights() -> void:
 		_prop(lights, "wall_lamp", o + Vector3(0, 2.35, -1.92), 0.0)
 		_add_bulb(lights, o + Vector3(0, 2.35, -1.72), Color(1.0, 0.30, 0.20), 1.15, 4.6, false)
 
-	# le monte-charge : une lueur froide, le seul point de fuite du niveau
-	if _cells.has(Vector2i(11, 9)):
-		var o := world_of(11, 9)
+	# Le monte-charge : une lueur froide, le seul point de fuite du niveau.
+	# La case est DÉDUITE du plan et non recopiée : elle n'est pas au même
+	# endroit d'un étage à l'autre, et une constante fausse ne se verrait
+	# nulle part — la lueur éclairerait simplement un mur.
+	var lift := _cellule_du_type("M")
+	if lift != Vector2i(-1, -1):
+		var o := world_of(lift.x, lift.y)
 		_add_bulb(lights, o + Vector3(0, 2.5, 0), Color(0.62, 0.78, 1.0), 1.6, 6.0, false)
 
 
@@ -729,21 +785,23 @@ func _pick_spawns() -> void:
 	# ronde de la Veilleuse : les couloirs, plus quelques pièces
 	for cell in _cells:
 		var c: String = _cells[cell]
-		if c == "C" or c in ["D", "E", "S", "A", "W", "R"]:
+		if c in lettres_ronde:
 			var w := _free_spot(world_of(cell.x, cell.y))
 			if _reachable(w):
 				patrol_points.append(w)
 
 	# fusibles : un par aile, jamais deux dans la même pièce
-	var candidates := {"D": [], "E": [], "S": [], "A": [], "W": [], "R": [], "H": []}
+	var candidates := {}
+	for w in lettres_ailes:
+		candidates[w] = []
 	for cell in _cells:
 		var c: String = _cells[cell]
 		if candidates.has(c):
-			candidates[c].append(cell)
-	var wings := ["D", "E", "S", "A", "W", "R"]
+			(candidates[c] as Array).append(cell)
+	var wings := lettres_ailes.duplicate()
 	_shuffle(wings)
 	var used: Array[Vector2i] = []
-	for i in GameState.FUSES_REQUIRED:
+	for i in GameState.objectif_nombre:
 		var placed := false
 		# on parcourt les ailes dans l'ordre, puis toutes les autres, jusqu'à
 		# trouver une pièce qui offre un emplacement atteignable
@@ -766,7 +824,21 @@ func _pick_spawns() -> void:
 
 	_placer_documents()
 
-	var bat_rooms := ["C", "H", "D", "E", "S", "R"]
+	# Morceaux de plâtre à jeter. Semés dans les couloirs et les salles de
+	# passage : il faut en trouver SUR LE CHEMIN, pas aller les chercher.
+	var n_jet := int(etage.get("jetables", 0))
+	if n_jet > 0:
+		var pool_jet: Array = []
+		for cell in _cells:
+			if _cells[cell] in lettres_ronde:
+				pool_jet.append(cell)
+		_shuffle(pool_jet)
+		for i in mini(n_jet, pool_jet.size()):
+			var spot := _free_spot(world_of(pool_jet[i].x, pool_jet[i].y))
+			if _reachable(spot):
+				jetable_spawns.append(spot)
+
+	var bat_rooms := lettres_piles
 	for i in 5:
 		var pool: Array = []
 		for cell in _cells:
@@ -977,12 +1049,27 @@ func _shuffle(a: Array) -> void:
 #  Requêtes
 # ==========================================================================
 func spawn_point() -> Vector3:
-	return world_of(3, 9) + Vector3(0.8, 0.0, 0.8)
+	return world_of(depart.x, depart.y) + depart_ecart
 
 
 func floor_kind_at(w: Vector3) -> String:
 	var c := _at(roundi(w.x / CELL), roundi(w.z / CELL))
+	if sols.has(c):
+		return str((sols[c] as Dictionary).get("kind", "lino"))
 	return "concrete" if _is_beton(c) else "lino"
+
+
+## De combien le sol multiplie la PORTÉE d'un pas.
+##
+## Le jeu savait déjà sur quoi on marche, mais ne s'en servait que pour choisir
+## l'échantillon : marcher dans l'eau sonnait mouillé sans s'entendre plus loin.
+## Ce facteur passe par le paramètre `scale` que NoiseBus et AudioLib
+## acheminent déjà, donc le son et ce qu'elle perçoit ne peuvent pas diverger.
+func floor_noise_factor(w: Vector3) -> float:
+	var c := _at(roundi(w.x / CELL), roundi(w.z / CELL))
+	if sols.has(c):
+		return float((sols[c] as Dictionary).get("bruit", 1.0))
+	return 1.0
 
 
 func cell_letter_at(w: Vector3) -> String:
