@@ -14,6 +14,12 @@ WHAT="${1:-all}"
 
 mkdir -p "$ROOT/build/web"
 
+# Les nappes et musiques passent en QOA : elles pèsent les trois quarts de la
+# bande-son, et ce jeu se télécharge avant de se jouer. Le réglage vit dans les
+# .import, donc on réimporte derrière pour qu'il soit pris en compte.
+python3 "$ROOT/tools/godot/fix_audio_imports.py"
+"$GODOT" --headless --path "$ROOT/game" --import >/dev/null 2>&1 || true
+
 if [[ "$WHAT" == "all" || "$WHAT" == "windows" ]]; then
 	echo "==> Windows"
 	"$GODOT" --headless --path "$ROOT/game" --export-release "Windows Desktop" >/dev/null

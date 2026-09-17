@@ -2,13 +2,13 @@
 
 importer="wav"
 type="AudioStreamWAV"
-uid="uid://w1ym537didoo"
-path="res://.godot/imported/amb_drone.wav-3da0a1c894c79b6954ce143a9c48f257.sample"
+uid="uid://cmvvi4ckx0rxu"
+path="res://.godot/imported/musique_3.wav-0fd7273ee9553b243fc1b1d72fa5cc27.sample"
 
 [deps]
 
-source_file="res://assets/audio/amb_drone.wav"
-dest_files=["res://.godot/imported/amb_drone.wav-3da0a1c894c79b6954ce143a9c48f257.sample"]
+source_file="res://assets/audio/musique_3.wav"
+dest_files=["res://.godot/imported/musique_3.wav-0fd7273ee9553b243fc1b1d72fa5cc27.sample"]
 
 [params]
 

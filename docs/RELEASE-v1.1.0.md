@@ -1,4 +1,4 @@
-<!-- Corps de la release GitHub v1.0.2.
+<!-- Corps de la release GitHub v1.1.0.
      À coller tel quel dans le champ « description » du formulaire
      https://github.com/DANX4529/HorrorGame/releases/new -->
 
@@ -28,6 +28,14 @@ Jouable aussi dans le navigateur, **y compris sur téléphone** : https://danx45
 **Chaque descente est différente.** Fusibles, mobilier, cachettes, lampes et documents sont tirés au sort. Le numéro de descente s'affiche en fin de partie : vous pouvez rejouer exactement le même sous-sol.
 
 **Trois difficultés**, qui agissent sur la finesse de son ouïe — jamais sur le bruit que vous émettez. Points de reprise, options complètes, relevé de fin de partie.
+
+## Nouveautés de la 1.1.0
+
+**Le sanatorium fait du bruit tout seul.** Trois couches : deux nappes de fond superposées en permanence — la cave et le souffle du bâtiment — plus une horloge qui va et vient ; des bruits isolés posés dans le noir à distance (une tôle qui travaille, une porte qui claque ailleurs, une toux, un sommier qui se détend, une respiration qui n'est pas la vôtre) ; et de rares nappes musicales, courtes, jamais deux fois la même.
+
+Rien de tout cela n'est entendu par la Veilleuse : vous n'êtes jamais puni pour un bruit que vous n'avez pas fait. Et tout se tait pendant une traque — c'est le moment où vous avez le plus besoin d'entendre clair.
+
+Malgré treize sons de plus, le téléchargement **diminue** : les nappes et musiques passent en QOA, ce qui les divise par quatre.
 
 ## Nouveautés de la 1.0.2
 

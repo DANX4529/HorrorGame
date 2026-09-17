@@ -12,9 +12,8 @@ var hud: CanvasLayer
 var prologue: CanvasLayer
 var tactile: CanvasLayer
 var menu: CanvasLayer
-var _amb: AudioStreamPlayer
+var ambiance: Node
 var _music: AudioStreamPlayer
-var _creak_t := 0.0
 
 var shot_path := ""
 var shot_frames := -1
@@ -59,6 +58,7 @@ var dbg_tactile := 0
 ## clavier n'est émise : sans cela, la feuille resterait ouverte pour toujours.
 var _tape_lecture := false
 var dbg_tactiletest := false
+var dbg_ambiance := false
 
 
 func _ready() -> void:
@@ -142,6 +142,8 @@ func _parse_cmdline() -> void:
 			dbg_tactile = -1
 		elif args[i] == "--tactiletest":
 			dbg_tactiletest = true
+		elif args[i] == "--ambiancetest":
+			dbg_ambiance = true
 		elif args[i] == "--bruit" and i + 1 < args.size():
 			dbg_bruit = float(args[i + 1])
 		elif args[i] == "--menace" and i + 1 < args.size():
@@ -187,10 +189,13 @@ func _build_world() -> void:
 	add_child(hud)
 	hud.bind(player)
 
-	_amb = Audio.make_loop("amb_drone", -17.0)
-	_amb.play()
-	_music = Audio.make_loop("music_chase", -60.0)
+	_music = Audio.make_loop("music_chase", -60.0, "Musique")
 	_music.play()
+
+	ambiance = preload("res://scripts/Ambiance.gd").new()
+	ambiance.name = "Ambiance"
+	ambiance.joueur = player
+	add_child(ambiance)
 
 	menu = preload("res://scripts/Menu.gd").new()
 	menu.name = "Menu"
@@ -244,6 +249,8 @@ func _build_world() -> void:
 		_run_v1_test()
 	if dbg_tactiletest:
 		_run_tactile_test()
+	if dbg_ambiance:
+		_run_ambiance_test()
 	if shot_frames >= 0:
 		_do_shot()
 
@@ -454,6 +461,8 @@ func _spawn_veilleuse() -> void:
 	veilleuse.name = "Veilleuse"
 	veilleuse.setup(level, player)
 	add_child(veilleuse)
+	if ambiance:
+		ambiance.veilleuse = veilleuse
 	# elle démarre à l'opposé du joueur, dans l'aile nord
 	var best: Vector3 = level.spawn_point()
 	var best_d := -1.0
@@ -506,17 +515,6 @@ func _process(delta: float) -> void:
 		var want := -13.0 if veilleuse.is_hunting() else -60.0
 		_music.volume_db = lerpf(_music.volume_db, want, delta * (2.5 if want > -40.0 else 0.7))
 
-	# craquements et gouttes, placés au hasard autour du joueur
-	_creak_t -= delta
-	if _creak_t <= 0.0:
-		_creak_t = randf_range(7.0, 20.0)
-		var a := randf() * TAU
-		var r := randf_range(5.0, 14.0)
-		var pos: Vector3 = player.global_position + Vector3(cos(a) * r, randf_range(0.2, 2.4), sin(a) * r)
-		if randf() < 0.55:
-			Audio.play_3d("creak_%d" % randi_range(1, 3), pos, -14.0, randf_range(0.85, 1.15))
-		else:
-			Audio.play_3d("drip_%d" % randi_range(1, 3), pos, -16.0, randf_range(0.9, 1.1))
 
 
 ## Parcours automatique de la boucle d'objectif : ramasser les 4 fusibles,
@@ -1236,6 +1234,117 @@ func _run_lore_test() -> void:
 	DirAccess.remove_absolute(GameState.FICHIER_PROGRESSION)
 	GameState.documents_lus.clear()
 	print("LORE RESULTAT : %s" % ("OK" if ok else "ECHEC"))
+	get_tree().quit()
+
+
+## Ambiance : nappes, bruits isolés, nappes musicales.
+##
+## Le risque propre à ce système est d'un genre particulier : il ne plante pas,
+## il DÉSÉQUILIBRE. Un son d'ambiance que la Veilleuse entendrait ferait punir
+## le joueur pour un bruit qu'il n'a pas fait ; une nappe qui se déclencherait
+## pendant une traque couvrirait l'information dont il a le plus besoin.
+func _run_ambiance_test() -> void:
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var ok := true
+	GameState.set_phase(GameState.Phase.JEU, true)
+
+	# --- 1. tous les sons déclarés existent réellement ---
+	var manquants := []
+	for b in ambiance.BRUITS:
+		if Audio.stream(str(b["son"])) == null:
+			manquants.append(b["son"])
+	for m in ambiance.MUSIQUES:
+		if Audio.stream(str(m)) == null:
+			manquants.append(m)
+	print("AMB  %d bruits + %d nappes musicales declares, introuvables : %s"
+			% [ambiance.BRUITS.size(), ambiance.MUSIQUES.size(), str(manquants)])
+	if not manquants.is_empty() or ambiance.BRUITS.size() < 8:
+		ok = false
+
+	# --- 2. AUCUN son d'ambiance ne doit atteindre la Veilleuse ---
+	var entendus := 0
+	var temoin := func(_p, _r, _k): entendus += 1
+	NoiseBus.noise.connect(temoin)
+	for i in 40:
+		ambiance.provoquer("bruit")
+	ambiance.provoquer("musique")
+	NoiseBus.noise.disconnect(temoin)
+	print("AMB  40 bruits + 1 nappe : %d ont atteint le bus sonore (attendu 0)" % entendus)
+	if entendus != 0:
+		print("AMB  ! l'ambiance nourrit la perception de la Veilleuse")
+		ok = false
+
+	# --- 3. la variété est réelle ---
+	var uniques := {}
+	for s2 in ambiance.joues:
+		uniques[s2] = true
+	var repets := 0
+	for i in range(1, ambiance.joues.size()):
+		if ambiance.joues[i] == ambiance.joues[i - 1]:
+			repets += 1
+	print("AMB  sur %d declenchements : %d sons differents, %d repetitions immediates"
+			% [ambiance.joues.size(), uniques.size(), repets])
+	if uniques.size() < 8 or repets > 0:
+		print("AMB  ! pas assez de variete, ou un son se repete d'affilee")
+		ok = false
+
+	# --- 4. silence pendant la traque ---
+	# On place la Veilleuse en chasse et on laisse tourner : rien ne doit partir.
+	if veilleuse:
+		veilleuse.etat = Veilleuse.Etat.CHASSE
+		ambiance.veilleuse = veilleuse
+		ambiance._t_bruit = 0.05
+		ambiance._t_musique = 0.05
+		var avant: int = ambiance.joues.size()
+		for f in 90:
+			await get_tree().process_frame
+		var pendant: int = ambiance.joues.size() - avant
+		print("AMB  en traque, sur 90 images : %d declenchements (attendu 0)" % pendant)
+		if pendant != 0:
+			ok = false
+		veilleuse.etat = Veilleuse.Etat.PATROUILLE
+		# et hors traque, ça repart
+		ambiance._t_bruit = 0.05
+		var avant2: int = ambiance.joues.size()
+		for f in 30:
+			await get_tree().process_frame
+		var apres: int = ambiance.joues.size() - avant2
+		print("AMB  hors traque, sur 30 images : %d declenchements (attendu >=1)" % apres)
+		if apres < 1:
+			ok = false
+
+	# --- 5. les nappes de fond sont armées et bouclent ---
+	#
+	# On ne teste PAS `playing` : ce conteneur n'a pas de carte son, et
+	# music_chase — antérieure à ce travail et parfaitement fonctionnelle en
+	# jeu — s'y déclare également à l'arrêt. Ce qui est vérifiable ici, c'est
+	# que chaque nappe porte bien un flux et qu'il est marqué bouclant : une
+	# nappe non bouclée s'arrêterait au bout de dix secondes, laissant le
+	# sous-sol muet pour le reste de la partie.
+	var nappes := {"cave": ambiance._cave, "souffle": ambiance._souffle,
+			"horloge": ambiance._horloge}
+	var defauts := []
+	for nom in nappes:
+		var j: AudioStreamPlayer = nappes[nom]
+		var flux := j.stream as AudioStreamWAV
+		if flux == null or flux.loop_mode != AudioStreamWAV.LOOP_FORWARD:
+			defauts.append(nom)
+	print("AMB  nappes armees et bouclantes : %d/3, defaillantes %s"
+			% [3 - defauts.size(), str(defauts)])
+	if not defauts.is_empty():
+		ok = false
+
+	# --- 6. chaque son part sur le bon bus, pour que les réglages agissent ---
+	var bus_ok: bool = ambiance._cave.bus == "Ambiance" \
+			and ambiance._souffle.bus == "Ambiance" \
+			and ambiance._horloge.bus == "Ambiance" \
+			and ambiance._musique.bus == "Musique"
+	print("AMB  bus : nappes=%s musique=%s" % [ambiance._cave.bus, ambiance._musique.bus])
+	if not bus_ok:
+		ok = false
+
+	print("AMB RESULTAT : %s" % ("OK" if ok else "ECHEC"))
 	get_tree().quit()
 
 

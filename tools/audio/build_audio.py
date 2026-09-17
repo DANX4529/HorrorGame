@@ -421,6 +421,146 @@ def _thump(f0, dur, punch):
     return S.saturate(x * punch, 1.5)
 
 
+
+# ==========================================================================
+#  Ambiance : ce que le sanatorium fait tout seul
+# ==========================================================================
+#  Le sous-sol n'avait qu'une seule nappe, et les gouttes et grincements déjà
+#  construits n'étaient branchés nulle part. Un lieu silencieux n'est pas
+#  inquiétant : il est vide. On lui donne donc trois couches — une nappe de
+#  fond, des bruits isolés qui semblent venir d'ailleurs, et de rares nappes
+#  musicales.
+#
+#  Rien de tout cela ne passe par NoiseBus : ces sons n'existent pas pour la
+#  Veilleuse. Les faire entendre par elle voudrait dire qu'un grincement de
+#  tuyau la dérange autant qu'un pas du joueur, et toute l'équité de la
+#  mécanique s'effondrerait.
+
+def amb_souffle():
+    """Souffle du bâtiment : très grave, presque sous le seuil d'audition."""
+    x = sfx.load(OW("Ambience", "earthquake.wav"))
+    x = sfx.pitch(x, 0.55)                      # ralenti : le grondement s'étale
+    x = sfx.best_loop(x, 12.0, t_min=1.0, fade=0.9)
+    x = S.lowpass(x, 150.0, 0.6)
+    return sfx.norm(sfx.room(x, 0.85, 0.30, 71), 0.55)
+
+
+def amb_horloge():
+    """Une horloge tourne encore, quelque part. Personne ne l'a remontée."""
+    x = sfx.load(OW("Ambience", "loopable-ticking-clock.wav"))
+    x = sfx.best_loop(x, 8.0, t_min=0.5, fade=0.25)
+    x = sfx.tilt(x, low_db=-3.0, high_db=-11.0)  # étouffée par les cloisons
+    return sfx.norm(sfx.room(x, 0.92, 0.55, 73), 0.42)
+
+
+def _lointain(x, ampleur=0.95, humide=0.62, coupe=1500.0, seed=11):
+    """Éloigne un son : la distance mange les aigus et ajoute la pièce."""
+    x = S.lowpass(x, coupe, 0.7)
+    return sfx.norm(sfx.room(x, ampleur, humide, seed), 0.80)
+
+
+def peur_tole():
+    """La tôle d'une gaine qui travaille. Long, grave, sans cause visible."""
+    x = sfx.trim(sfx.load(WM("metal_sheet_03.ogg")))
+    x = sfx.pitch(x, 0.42)
+    return _lointain(x, 0.95, 0.58, 2200.0, 21)
+
+
+def peur_claque():
+    """Une porte claque, loin. Le joueur n'en a ouvert aucune."""
+    x = sfx.trim(sfx.load(WM("wood_slam_02.ogg")))
+    x = sfx.pitch(x, 0.78)
+    return _lointain(x, 0.97, 0.70, 900.0, 22)
+
+
+def peur_chute():
+    """Quelque chose de métallique tombe, deux pièces plus loin."""
+    x = sfx.trim(sfx.load(WM("metal_falling_01.ogg")))
+    x = sfx.pitch(x, 0.68)
+    return _lointain(x, 0.95, 0.60, 2600.0, 23)
+
+
+def peur_toux():
+    """Une toux dans le noir. Il n'y a personne d'autre que vous, ici."""
+    x = sfx.trim(sfx.load(OW("Human", "cough2.wav")))
+    x = sfx.pitch(x, 0.86)
+    x = sfx.gain(x, -4.0)
+    return _lointain(x, 0.93, 0.66, 2000.0, 24)
+
+
+def peur_souffle():
+    """Une respiration qui n'est pas la vôtre, et qui est près."""
+    x = sfx.trim(sfx.load(OW("Human", "breath-female2.wav")))
+    x = sfx.pitch(x, 0.74)
+    x = sfx.tilt(x, low_db=+2.0, high_db=-6.0)
+    return sfx.norm(sfx.room(x, 0.35, 0.16, 25), 0.62)
+
+
+def peur_plainte():
+    """Une plainte très lointaine. Peut-être elle. Peut-être pas."""
+    x = sfx.trim(sfx.load(GH("qubodup-GhostMoan04.wav")))
+    x = sfx.pitch(x, 0.80)
+    x = sfx.gain(x, -6.0)
+    return _lointain(x, 0.98, 0.74, 1100.0, 26)
+
+
+def peur_grincement():
+    """Une latte grince au-dessus. Il n'y a pas d'étage au-dessus."""
+    x = sfx.trim(sfx.load(WM("wood_squeak_01.ogg")))
+    x = sfx.pitch(x, 0.62)
+    return _lointain(x, 0.90, 0.52, 3000.0, 27)
+
+
+def peur_ressort():
+    """Le sommier d'un lit se détend. Quelqu'un vient de se lever."""
+    x = sfx.trim(sfx.load(WM("metal_spring_01.ogg")))
+    x = sfx.pitch(x, 0.72)
+    return _lointain(x, 0.92, 0.56, 2800.0, 28)
+
+
+def _nappe(dur, base, intervalles, seed, brillance=0.35):
+    """Nappe de dread : une fondamentale tenue, quelques partiels désaccordés.
+
+    Volontairement pauvre en notes. Une mélodie se retient et devient une
+    compagne ; une nappe immobile reste un malaise.
+    """
+    n = int(dur * SR)
+    x = np.zeros(n, np.float32)
+    rng2 = np.random.default_rng(seed)
+    for k, (ratio, g, entree) in enumerate(intervalles):
+        f = base * ratio
+        # battement lent : deux voix très légèrement désaccordées
+        for detune in (1.0, 1.0 + rng2.uniform(0.0016, 0.0042)):
+            v = S.sine(dur, f * detune)
+            env = S.env_curve(dur, [(0, 0), (entree, 0), (entree + 0.22, g),
+                                    (0.80, g * 0.85), (1, 0)])
+            x += S.fit(v * env, n) * 0.5
+    # souffle d'air par-dessus, qui donne le lieu
+    air = S.bandpass(S.pink(dur, seed + 5), 900, 0.8)
+    air *= S.env_curve(dur, [(0, 0), (0.12, brillance), (0.7, brillance * 0.6), (1, 0)])
+    x += S.fit(air, n) * 0.5
+    x = S.lowpass(x, 2600.0, 0.7)
+    return S.normalize(S.reverb(x, 0.93, 0.42, seed + 9), 0.70)
+
+
+def musique_1():
+    """« Le couloir » — quinte à vide qui se trouble."""
+    return _nappe(26.0, 55.0, [(1.0, 1.0, 0.00), (1.5, 0.52, 0.18),
+                               (2.0, 0.30, 0.42), (2.9966, 0.18, 0.62)], 101)
+
+
+def musique_2():
+    """« Elle passe » — seconde mineure, l'intervalle du sting de détection."""
+    return _nappe(31.0, 48.0, [(1.0, 1.0, 0.00), (1.0595, 0.44, 0.24),
+                               (2.0, 0.26, 0.50), (4.0, 0.12, 0.70)], 202, 0.28)
+
+
+def musique_3():
+    """« Le service de veille » — presque rien, très bas, très long."""
+    return _nappe(38.0, 41.0, [(1.0, 1.0, 0.00), (2.0, 0.34, 0.30),
+                               (3.0, 0.16, 0.55)], 303, 0.20)
+
+
 # ==========================================================================
 BANK = {
     # --- enregistrements CC0 ---
@@ -450,6 +590,20 @@ BANK = {
     "music_chase":      music_chase,
     "stinger_detect":   stinger_detect,
     "stinger_lost":     stinger_lost,
+    # --- ambiance : nappes, bruits isolés, nappes musicales ---
+    "amb_souffle":      amb_souffle,
+    "amb_horloge":      amb_horloge,
+    "peur_tole":        peur_tole,
+    "peur_claque":      peur_claque,
+    "peur_chute":       peur_chute,
+    "peur_toux":        peur_toux,
+    "peur_souffle":     peur_souffle,
+    "peur_plainte":     peur_plainte,
+    "peur_grincement":  peur_grincement,
+    "peur_ressort":     peur_ressort,
+    "musique_1":        musique_1,
+    "musique_2":        musique_2,
+    "musique_3":        musique_3,
 }
 for _i in range(4):
     BANK[f"step_lino_{_i+1}"] = (lambda i: (lambda: step_lino(i)))(_i)

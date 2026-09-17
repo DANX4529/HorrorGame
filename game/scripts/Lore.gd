@@ -64,7 +64,7 @@ const CREDITS := [
 	["", [
 		"RESPIRE",
 		"Sanatorium du Mont-Cendre — 1961",
-		"version 1.0.3",
+		"version 1.1.0",
 	]],
 	["Conception, écriture et réalisation", [
 		"Liam RIIS",
@@ -81,13 +81,15 @@ const CREDITS := [
 	]],
 	["Enregistrements sonores — tous CC0 1.0", [
 		"Owlish Media (owlstorm) — Sound Effects Pack",
-		"      respiration, halètement, cri, pas, impacts",
+		"      respiration, halètement, cri, pas, impacts,",
+		"      grondement du bâtiment, horloge, toux",
 		"rubberduck — 100 CC0 metal and wood SFX",
-		"      portes, serrures, tôle, grincements",
+		"      portes, serrures, tôle, grincements,",
+		"      chutes, sommiers, claquements lointains",
 		"Fantozzi — Fantozzi's Footsteps",
 		"      pas sur pierre",
 		"qubodup — Ghost Monster Voice Moaning & Growling",
-		"      râles de la Veilleuse",
+		"      râles de la Veilleuse, plaintes lointaines",
 		"Spring Spring — Dark Cavern Ambient",
 		"      nappe d'ambiance souterraine",
 		"Ogrebane — Heartbeat sounds",
@@ -95,8 +97,11 @@ const CREDITS := [
 		"Tous sur opengameart.org",
 	]],
 	["Bande-son synthétisée", [
-		"Apnée, nappe de traque, remise sous tension et stings",
-		"sont synthétisés pour ce jeu (DSP numpy).",
+		"Apnée, nappe de traque, remise sous tension, stings et",
+		"les trois nappes de dread sont synthétisés pour ce jeu",
+		"(DSP numpy). Les bruits d'ambiance sont recomposés à",
+		"partir des enregistrements ci-dessus : ralentis,",
+		"transposés, éloignés dans une réverbération.",
 	]],
 	["Sur téléphone", [
 		"Le jeu détecte le doigt et adapte ses commandes :",
