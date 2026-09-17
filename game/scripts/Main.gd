@@ -1837,10 +1837,10 @@ func _run_seed_report() -> void:
 	# Plan de ce qui reste navigable après élagage. Une salle entièrement
 	# amputée saute aux yeux ici, là où un simple total ne dit pas OÙ.
 	print("SEEDCHECK  plan (minuscule = amputee, . = vide) :")
-	for y in level.MAP.size():
+	for y in level.carte.size():
 		var ligne := ""
-		for x in (level.MAP[y] as String).length():
-			var c: String = (level.MAP[y] as String)[x]
+		for x in (level.carte[y] as String).length():
+			var c: String = (level.carte[y] as String)[x]
 			if c == ".":
 				ligne += "."
 				continue

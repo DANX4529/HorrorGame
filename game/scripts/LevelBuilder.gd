@@ -11,44 +11,18 @@ const WALL_H := 3.0
 
 # --------------------------------------------------------------------------
 #  Le plan
-#     .  maçonnerie pleine / extérieur
-#     C  couloir            A  archives         D,E  dortoirs
-#     S  salle de soins     W  salle d'eau      H  hall d'entrée
-#     R  réserve            T  chaufferie       M  monte-charge (sortie)
+#
+#  Il ne vit plus ici : chaque étage apporte le sien (voir Etages.gd). Ces
+#  membres sont remplis par build() et tiennent lieu de ce qui était autrefois
+#  des constantes — le reste du fichier les lit exactement de la même façon.
 # --------------------------------------------------------------------------
-const MAP := [
-	".............",
-	".AA.DD.EE....",
-	".AA.DD.EE....",
-	".CCCCCCCCCC..",
-	".C........C..",
-	".C.SS.WW..C..",
-	".C.SS.WW..C..",
-	".CCCCCCCCCC..",
-	"...HH..RR.TT.",
-	"...HH..RR.TM.",
-	".............",
-]
-
-## Portes : [x, y, direction] — la direction désigne l'arête de la case.
-const DOORS := [
-	[2, 2, "S"],            # archives -> couloir
-	[4, 2, "S"],            # dortoir D -> couloir
-	[8, 2, "S"],            # dortoir E -> couloir
-	[3, 6, "S"],            # soins -> couloir
-	[7, 6, "S"],            # salle d'eau -> couloir
-	[3, 8, "N"],            # hall -> couloir
-	[8, 8, "N"],            # réserve -> couloir
-	[10, 8, "N"],           # chaufferie -> couloir (porte métallique)
-]
-
-## Ouvertures francches (pas de mur du tout)
-const OPENINGS := [
-	[11, 9, "W"],           # chaufferie -> monte-charge
-]
-
-## Cases utilisant le kit béton (sous-sol technique)
-const BETON := ["T", "M", "R"]
+var carte: Array = []                ## grille textuelle, une case = 4 m
+var portes: Array = []               ## [x, y, direction] portant un vantail
+var ouvertures: Array = []           ## [x, y, direction] sans mur du tout
+var lettres_beton: Array = []        ## cases utilisant le kit béton
+var cellule_tableau := Vector2i(-1, -1)
+var sols: Dictionary = {}            ## lettre -> {kind, bruit}
+var etage: Dictionary = {}           ## l'étage en cours de construction
 
 # --------------------------------------------------------------------------
 var _env_scenes: Dictionary = {}
@@ -78,8 +52,6 @@ var exit_gate: Node3D = null
 var _rng := RandomNumberGenerator.new()
 
 const NAV_RES := 0.5                 # pas de la grille de navigation, en mètres
-## Case du tableau électrique. _dress_technique n'équipe que celle-ci.
-const CELLULE_TABLEAU := Vector2i(10, 8)
 const AGENT_R := 0.42                # rayon d'encombrement de la Veilleuse
 ## Demi-largeur de la voie gardée libre au centre de chaque couloir. Elle doit
 ## rester franchement supérieure à AGENT_R, sinon un meuble posé juste à côté
@@ -88,8 +60,19 @@ const VOIE_DEMI_LARGEUR := 0.80
 
 
 # ==========================================================================
-func build(seed_val := 0) -> void:
+func build(seed_val := 0, etage_def: Dictionary = {}) -> void:
 	_rng.seed = seed_val if seed_val != 0 else 0x5EED
+	# Sans étage donné on prend le premier : les outils de diagnostic et les
+	# tests qui n'en demandent pas continuent de construire le sanatorium
+	# historique, à l'identique.
+	etage = etage_def if not etage_def.is_empty() else Etages.etage(Etages.premier())
+	carte = etage["carte"]
+	portes = etage["portes"]
+	ouvertures = etage["ouvertures"]
+	lettres_beton = etage["lettres_beton"]
+	cellule_tableau = etage["cellule_tableau"]
+	sols = etage.get("sols", {})
+	_valider_etage()
 	_load_scenes()
 	_parse_map()
 	_build_shell()
@@ -98,6 +81,49 @@ func build(seed_val := 0) -> void:
 	_build_lights()
 	_bake_nav()
 	_pick_spawns()
+
+
+## Contrôle du plan AVANT de bâtir quoi que ce soit.
+##
+## Un étage est de la donnée écrite à la main : une ligne trop courte, une porte
+## posée sur une case vide ou un tableau électrique hors du plan ne se voient
+## nulle part à l'exécution — le niveau se construit, et c'est seulement en y
+## jouant qu'on découvre qu'il manque un mur ou qu'une porte ne mène nulle part.
+## On préfère refuser bruyamment.
+func _valider_etage() -> void:
+	var nom: String = str(etage.get("titre", "?"))
+	assert(not carte.is_empty(), "%s : carte vide" % nom)
+	var largeur: int = (carte[0] as String).length()
+	for y in carte.size():
+		# _build_shell lit la largeur de la PREMIÈRE ligne : une grille
+		# irrégulière perdrait silencieusement des murs sur les lignes plus longues.
+		assert((carte[y] as String).length() == largeur,
+				"%s : ligne %d large de %d au lieu de %d" \
+				% [nom, y, (carte[y] as String).length(), largeur])
+
+	for liste in [["porte", portes], ["ouverture", ouvertures]]:
+		for d in (liste[1] as Array):
+			var c := Vector2i(int(d[0]), int(d[1]))
+			assert(_dans_carte(c), "%s : %s déclarée hors du plan en %s"
+					% [nom, liste[0], c])
+			assert(_lettre_brute(c) != ".", "%s : %s posée sur une case pleine en %s"
+					% [nom, liste[0], c])
+
+	assert(_dans_carte(cellule_tableau), "%s : tableau électrique hors du plan en %s"
+			% [nom, cellule_tableau])
+	assert(_lettre_brute(cellule_tableau) != ".",
+			"%s : tableau électrique sur une case pleine en %s" % [nom, cellule_tableau])
+
+
+func _dans_carte(c: Vector2i) -> bool:
+	return c.y >= 0 and c.y < carte.size() \
+			and c.x >= 0 and c.x < (carte[0] as String).length()
+
+
+## La lettre lue directement dans la grille — _at() dépend de _cells, qui n'est
+## pas encore peuplé au moment de la validation.
+func _lettre_brute(c: Vector2i) -> String:
+	return (carte[c.y] as String)[c.x]
 
 
 func _load_scenes() -> void:
@@ -118,16 +144,16 @@ func _load_scenes() -> void:
 
 
 func _parse_map() -> void:
-	for y in MAP.size():
-		var row: String = MAP[y]
+	for y in carte.size():
+		var row: String = carte[y]
 		for x in row.length():
 			var c := row[x]
 			if c != ".":
 				_cells[Vector2i(x, y)] = c
-	for d in DOORS:
+	for d in portes:
 		_doors[_edge_key(d[0], d[1], d[2])] = true
 		_door_zones.append(_door_zone(d[0], d[1], d[2]))
-	for o in OPENINGS:
+	for o in ouvertures:
 		_openings[_edge_key(o[0], o[1], o[2])] = true
 		_door_zones.append(_door_zone(o[0], o[1], o[2]))
 	# Les abords du tableau électrique et du monte-charge sont protégés au même
@@ -137,7 +163,7 @@ func _parse_map() -> void:
 	# Les cases sont DÉDUITES du plan, jamais recopiées en dur : le monte-charge
 	# est en (11,9) et non (10,9), et une constante fausse ne se serait vue
 	# nulle part — la protection se serait simplement appliquée à côté.
-	acces_tableau = world_of(CELLULE_TABLEAU.x, CELLULE_TABLEAU.y) + Vector3(1.30, 0, -1.05)
+	acces_tableau = world_of(cellule_tableau.x, cellule_tableau.y) + Vector3(1.30, 0, -1.05)
 	_door_zones.append({"pos": acces_tableau, "hx": 1.15, "hz": 1.15})
 	var m := _cellule_du_type("M")
 	if m != Vector2i(-1, -1):
@@ -203,7 +229,7 @@ func _at(x: int, y: int) -> String:
 
 
 func _is_beton(c: String) -> bool:
-	return c in BETON
+	return c in lettres_beton
 
 
 func world_of(x: int, y: int) -> Vector3:
@@ -230,8 +256,8 @@ func _build_shell() -> void:
 		_add_box(shell, p + Vector3(0, WALL_H + 0.06, 0), Vector3(CELL, 0.12, CELL))
 
 	# arêtes horizontales : mur entre (x,y) et (x,y+1)
-	for y in range(-1, MAP.size()):
-		for x in range(0, MAP[0].length()):
+	for y in range(-1, carte.size()):
+		for x in range(0, (carte[0] as String).length()):
 			var a := _at(x, y)
 			var b := _at(x, y + 1)
 			if a == b:
@@ -243,8 +269,8 @@ func _build_shell() -> void:
 			_edge(shell, key, pos, 0.0, _is_beton(a) or _is_beton(b), a, b)
 
 	# arêtes verticales : mur entre (x,y) et (x+1,y)
-	for y in range(0, MAP.size()):
-		for x in range(-1, MAP[0].length()):
+	for y in range(0, carte.size()):
+		for x in range(-1, (carte[0] as String).length()):
 			var a := _at(x, y)
 			var b := _at(x + 1, y)
 			if a == b:
@@ -458,7 +484,7 @@ func _dress_reserve(p: Node3D, o: Vector3, cell: Vector2i) -> void:
 
 
 func _dress_technique(p: Node3D, o: Vector3, cell: Vector2i) -> void:
-	if cell == CELLULE_TABLEAU:
+	if cell == cellule_tableau:
 		fusebox = preload("res://scripts/FuseBox.gd").new()
 		p.add_child(fusebox)
 		fusebox.setup(_prop_scenes["fuse_box_body"], _prop_scenes["fuse_box_door"],

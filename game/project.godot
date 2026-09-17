@@ -17,6 +17,7 @@ config/icon="res://icon.svg"
 [autoload]
 
 Settings="*res://scripts/Settings.gd"
+Etages="*res://scripts/Etages.gd"
 GameState="*res://scripts/GameState.gd"
 MaterialLib="*res://scripts/MaterialLib.gd"
 NoiseBus="*res://scripts/NoiseBus.gd"
