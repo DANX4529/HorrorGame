@@ -1955,6 +1955,46 @@ func _run_etages_test() -> void:
 				% [Etages.total(), vus_chaine])
 		ok = false
 
+	# 7. la descente elle-meme : ouvrir une campagne, descendre, et verifier
+	#    qu'on arrive vraiment en dessous AVEC l'objectif de l'etage d'arrivee.
+	#    reset_run() lit l'objectif dans l'etage courant ; s'il etait lu trop
+	#    tot, on jouerait le -2 au bareme du -1 sans que rien ne le dise.
+	GameState.nouvelle_campagne()
+	var g0 := GameState.graine
+	print("ETAGES  campagne ouverte au niveau %d, objectif %d %s"
+			% [GameState.etage_courant, GameState.objectif_nombre,
+			   GameState.objectif_pluriel])
+	if GameState.etage_courant != Etages.premier():
+		print("ETAGES  ECHEC : une campagne neuve ne commence pas en haut")
+		ok = false
+
+	var attendu := Etages.suivant(GameState.etage_courant)
+	if GameState.descendre_etage():
+		GameState.reset_run()
+		var def: Dictionary = GameState.etage_def()
+		print("ETAGES  descendu au niveau %d (%s), objectif %d %s, graine %s"
+				% [GameState.etage_courant, str(def.get("titre", "?")),
+				   GameState.objectif_nombre, GameState.objectif_pluriel,
+				   "renouvelee" if GameState.graine != g0 else "INCHANGEE"])
+		if GameState.etage_courant != attendu:
+			print("ETAGES  ECHEC : arrive au niveau %d au lieu de %d"
+					% [GameState.etage_courant, attendu])
+			ok = false
+		var n_attendu := int((def.get("objectif", {}) as Dictionary).get("nombre", 0))
+		if GameState.objectif_nombre != n_attendu:
+			print("ETAGES  ECHEC : objectif %d au lieu de %d — l'etage d'arrivee joue au bareme du precedent"
+					% [GameState.objectif_nombre, n_attendu])
+			ok = false
+		if GameState.graine == g0:
+			print("ETAGES  ECHEC : meme graine qu'en haut, l'etage d'en dessous serait fige")
+			ok = false
+		if not GameState.etages_termines.has(Etages.premier()):
+			print("ETAGES  ECHEC : l'etage quitte n'est pas marque comme terminé")
+			ok = false
+	else:
+		print("ETAGES  ECHEC : impossible de descendre depuis le premier etage")
+		ok = false
+
 	print("ETAGES RESULTAT : %s" % ("OK" if ok else "ECHEC"))
 	get_tree().quit(0 if ok else 1)
 

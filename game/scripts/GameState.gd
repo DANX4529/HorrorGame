@@ -338,7 +338,6 @@ func remonter_butin() -> int:
 		c.load(FICHIER_PROGRESSION)
 		c.set_value("documents", "lus", documents_lus.keys())
 		c.save(FICHIER_PROGRESSION)
-	etages_termines[etage_courant] = true
 	_ecrire_campagne()
 	return n
 
@@ -355,6 +354,11 @@ func descendre_etage() -> bool:
 	var suivant := Etages.suivant(etage_courant)
 	if suivant == 0:
 		return false
+	# Quitter un étage par le bas, C'EST l'avoir terminé : il n'y a pas d'autre
+	# façon d'en sortir. La marque appartient donc ici et non à remonter_butin(),
+	# qui ne s'occupe que des documents — sans quoi un chemin qui descendrait
+	# sans passer par le butin laisserait l'écran de descente mentir.
+	etages_termines[etage_courant] = true
 	etage_courant = suivant
 	etage_atteint = mini(etage_atteint, suivant)
 	# une graine par étage : chaque étage est un plan neuf, et rejouer le même
