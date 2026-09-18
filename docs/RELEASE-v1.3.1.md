@@ -16,8 +16,8 @@ Il y a une réserve, et autant la dire franchement : **le mécanisme ne peut rie
 
 | Fichier | Taille | Pour qui |
 |---|---|---|
-| **`RESPIRE-windows.exe`** | TAILLE_EXE | Double-cliquez, ça se lance. Rien à installer. |
-| `RESPIRE-windows.zip` | TAILLE_ZIP | Même jeu, moitié moins lourd à télécharger. |
+| **`RESPIRE-windows.exe`** | 149 Mo | Double-cliquez, ça se lance. Rien à installer. |
+| `RESPIRE-windows.zip` | 77 Mo | Même jeu, moitié moins lourd à télécharger. |
 
 Windows peut afficher un avertissement SmartScreen : l'exécutable n'est pas signé numériquement. **Informations complémentaires → Exécuter quand même.**
 
