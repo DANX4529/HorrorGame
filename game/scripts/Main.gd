@@ -200,6 +200,12 @@ func _build_world() -> void:
 		# lui — d'où un verdict qui changeait d'une exécution à l'autre, pour
 		# une raison qui n'était écrite nulle part.
 		GameState.etage_courant = Etages.premier()
+		# … et la graine. Depuis qu'une descente interrompue se reprend, la
+		# graine de campagne est relue du disque au démarrage de l'autoload.
+		# Sans cette remise à zéro, --loretest rejoue le plan laissé par le
+		# test précédent : il échoue alors sur un mauvais tirage de façon
+		# reproductible sur une machine, et jamais sur une autre.
+		GameState.graine = 0
 	# l'étage demandé doit être choisi AVANT reset_run(), qui y lit l'objectif
 	if dbg_etage != 0:
 		GameState.etage_courant = dbg_etage
@@ -1200,8 +1206,24 @@ func _run_lore_test() -> void:
 			if not (cc in (d.get("lieu", []) as Array)):
 				print("LORE    hors salle : %-22s voulait %s, a atterri en '%s'"
 						% [d["id"], str(d.get("lieu", [])), cc])
-	print("LORE  places dans une salle pertinente : %d / %d" % [bien, places.size()])
-	if bien < places.size() * 0.75:
+	# Seuil calibre sur la MESURE, pas sur une intuition.
+	#
+	# Le placeur se rabat sur un couloir quand les salles voulues sont prises :
+	# l'etage -1 porte quatorze documents pour un petit nombre de cases
+	# d'archives, de soins et de dortoirs. Mesure sur des graines neuves : de
+	# 10 a 13 documents bien places sur 14, soit un a quatre replis. Le seuil
+	# de 75 % exigeait onze — il tombait donc AU MILIEU de la variation normale
+	# et echouait une fois sur cinq, au hasard du tirage.
+	#
+	# Un seuil qui se declenche sans defaut apprend a passer outre. A 60 % il
+	# ne dit plus rien de la variation ordinaire, et garde tout son sens pour
+	# ce qu'il surveille : si le champ « lieu » cessait d'etre lu, les
+	# documents tomberaient au hasard des cases et les couloirs en prendraient
+	# pres de la moitie.
+	var replis: int = places.size() - bien
+	print("LORE  places dans une salle pertinente : %d / %d  (%d repli(s) en couloir)"
+			% [bien, places.size(), replis])
+	if bien < places.size() * 0.60:
 		print("LORE  ! trop de documents echouent hors de leur salle")
 		ok = false
 
