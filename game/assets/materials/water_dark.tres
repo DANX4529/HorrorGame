@@ -13,5 +13,5 @@ normal_scale = 1.0
 orm_texture = ExtResource("t2")
 texture_filter = 5
 texture_repeat = true
-metallic = 0.25
+metallic = 0.0
 roughness = 1.0

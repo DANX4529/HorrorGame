@@ -45,7 +45,8 @@ PAL = {
     "faience":      (0.776, 0.808, 0.784),
     "faience_bleu": (0.545, 0.639, 0.647),
     "eau_sombre":   (0.055, 0.082, 0.078),
-    "eau_reflet":   (0.180, 0.239, 0.239),
+    # N'est lue QUE par water_dark : la monter n'éclaircit rien d'autre.
+    "eau_reflet":   (0.420, 0.505, 0.482),
     "vert_gris":    (0.353, 0.510, 0.451),
     "laiton":       (0.494, 0.427, 0.243),
     "email":        (0.831, 0.839, 0.812),
@@ -545,8 +546,17 @@ def water_dark(res=512, seed=221):
     """Eau stagnante. Presque noire, très lisse, avec le voile qui s'est formé
     en surface — c'est la rugosité qui fait lire l'eau, pas la couleur."""
     ond = N.fbm(res, 5, 5, seed=seed) * 0.6 + N.fbm(res, 11, 4, seed=seed + 1) * 0.4
+    # Le pari d'origine — « c'est la rugosité qui fait lire l'eau, pas la
+    # couleur » — ne tient pas dans ce moteur. En gl_compatibility il n'y a ni
+    # réflexion d'écran ni sonde : un quasi-miroir n'a RIEN à refléter hors du
+    # petit éclat de la lampe, et il ne reste que l'albédo. À 23/255 le bassin
+    # sortait noir, indiscernable d'un trou ou d'un défaut d'affichage — alors
+    # que la mécanique de l'étage repose sur le fait de VOIR où l'on patauge.
+    # Mesuré en rendant la même salle à lumière 8 : l'eau s'y lit très bien.
+    # C'est donc la luminosité qu'il faut monter, pas la rugosité qu'il faut
+    # défaire. On reste très sombre — mais au-dessus du noir.
     col = N.mix_rgb(_solid(res, "eau_sombre"), _solid(res, "eau_reflet"),
-                    N.clamp01((ond - 0.45) * 1.6) * 0.45)
+                    N.clamp01((ond - 0.30) * 1.5) * 0.92)
 
     # voile / pellicule : des plaques irisées immobiles
     voile = N.clamp01((N.fbm(res, 4, 6, seed=seed + 2) - 0.56) * 4.5)
@@ -558,7 +568,11 @@ def water_dark(res=512, seed=221):
 
     h = ond * 0.5 + voile * 0.2
     # presque miroir là où le voile n'a pas pris
-    rough = 0.05 + voile * 0.55 + deb * 0.4
+    # Rugosité de base remontée de 0,05 à 0,34 : à 0,05 la lampe ne laissait
+    # qu'un point d'éclat, invisible ailleurs qu'à l'angle exact du miroir.
+    # Plus rugueux, le même éclat s'étale en un voile large — et c'est CE
+    # voile, faute de réflexions dans ce moteur, qui fait lire « de l'eau ».
+    rough = 0.34 + voile * 0.40 + deb * 0.26
     return dict(albedo=N.clamp01(col), height=N.normalize(h),
                 rough=N.clamp01(rough), metal=np.zeros((res, res), np.float32),
                 normal_strength=0.9)

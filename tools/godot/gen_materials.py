@@ -30,7 +30,7 @@ MATS = {
     # L'eau : sombre et lisse. Pas de transparence — on ne voit pas le fond
     # d'un bassin d'hydrothérapie qui n'a pas été vidé depuis 1961, et une
     # surface opaque et miroitante se lit mieux qu'un verre teinté.
-    "water_dark":      dict(spec="metallic = 0.25\nroughness = 1.0"),
+    "water_dark":      dict(spec="metallic = 0.0\nroughness = 1.0"),
     "email":           dict(),
     "glass_dirty":     dict(ds=True, alpha=True,
                             spec="albedo_color = Color(0.75, 0.78, 0.75, 0.34)"),
