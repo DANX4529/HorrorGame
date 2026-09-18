@@ -1,21 +1,19 @@
-[gd_resource type="AudioBusLayout" format=3]
+[gd_resource type="AudioBusLayout" load_steps=3 format=3 uid="uid://o6gk26j8lc63"]
 
 [sub_resource type="AudioEffectReverb" id="AudioEffectReverb_emp"]
+predelay_msec = 62.0
+predelay_feedback = 0.38
 room_size = 0.88
 damping = 0.42
-spread = 1.0
 hipass = 0.08
 dry = 0.0
 wet = 1.0
-predelay_msec = 62.0
-predelay_feedback = 0.38
 
 [sub_resource type="AudioEffectLowPassFilter" id="AudioEffectLowPassFilter_emp"]
 cutoff_hz = 3200.0
 resonance = 0.12
 
 [resource]
-bus/0/volume_db = 0.0
 bus/1/name = &"SFX"
 bus/1/solo = false
 bus/1/mute = false

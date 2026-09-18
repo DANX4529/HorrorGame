@@ -197,6 +197,7 @@ func _build_world() -> void:
 	add_child(player)
 	player.global_position = level.spawn_point()
 	player.set_floor_kind(level.floor_kind_at(level.spawn_point()))
+	player.set_floor_noise(level.floor_noise_factor(level.spawn_point()))
 
 	_spawn_pickups()
 	if not dbg_no_entity:
@@ -477,7 +478,11 @@ func _spawn_pickups() -> void:
 	var holder := Node3D.new()
 	holder.name = "Pickups"
 	add_child(holder)
-	var fuse_scene: PackedScene = load("res://assets/models/props/fuse.glb")
+	# Le modèle de la pièce à réunir suit l'étage : un fusible céramique n'a
+	# rien à faire dans une salle d'hydrothérapie.
+	var modele: String = str((GameState.etage_def().get("objectif", {}) as Dictionary)
+			.get("modele", "fuse"))
+	var fuse_scene: PackedScene = load("res://assets/models/props/%s.glb" % modele)
 	var bat_scene: PackedScene = load("res://assets/models/props/battery.glb")
 	# à la reprise, les fusibles déjà posés ne réapparaissent pas
 	var deja: int = GameState.fuses_installed
@@ -575,6 +580,7 @@ func _process(delta: float) -> void:
 	# le sol change de matériau entre les ailes
 	if player:
 		player.set_floor_kind(level.floor_kind_at(player.global_position))
+		player.set_floor_noise(level.floor_noise_factor(player.global_position))
 
 	# musique de traque : elle monte quand la Veilleuse chasse
 	if _music and veilleuse:
@@ -1889,7 +1895,12 @@ func _run_v1_test() -> void:
 func _run_etages_test() -> void:
 	await get_tree().process_frame
 	var ok := true
-	var connues := ["C", "D", "E", "S", "A", "H", "R", "T", "M", "W", "P", "G"]
+	# Lue chez LevelBuilder, pas recopiée : deux listes finissent toujours par
+	# diverger, et c'est le test qui aurait tort.
+	# Lue sur le niveau construit, pas recopiée : deux listes finissent toujours
+	# par diverger, et c'est le test qui aurait tort. (LevelBuilder n'a pas de
+	# class_name : il se charge par preload, donc on passe par l'instance.)
+	var connues: Array = level.LETTRES_HABILLEES
 	var vus := {}
 
 	print("ETAGES  %d etage(s) declare(s)" % Etages.total())

@@ -121,6 +121,7 @@ const CHAPITRES := {
 	2: "La cure d'obscurité",
 	3: "Marthe",
 	4: "Le pavillon C",
+	5: "Les bains",
 }
 
 const DOCUMENTS := [
@@ -521,6 +522,143 @@ En dessous, d'une autre main, plus haut :
 Et plus bas, minuscule, presque effacé :
 
       e l l e   a u s s i""",
+},
+# =========================================================================
+#  CHAPITRE V — LES BAINS   (niveau −3)
+#  Où l'on envoyait ceux qui faisaient du bruit.
+# =========================================================================
+{
+	"id": "bains_reglement", "chap": 5, "niveau": -3, "genre": "mur",
+	"lieu": ["C", "B"],
+	"titre": "Règlement affiché",
+	"texte": """HYDROTHÉRAPIE — NIVEAU −3
+
+Le bain prolongé n'est pas une punition.
+
+C'est un apaisement. Le pensionnaire y est descendu
+lorsque son agitation trouble le repos des autres.
+
+Durée minimale : six heures.
+Durée maximale : à l'appréciation du service.
+
+L'eau est maintenue à trente-quatre degrés.
+
+Il est inutile d'appeler. La galerie est carrelée,
+et le personnel n'entend rien depuis le palier.""",
+},
+{
+	"id": "bains_registre", "chap": 5, "niveau": -3, "genre": "registre",
+	"lieu": ["N", "V"],
+	"titre": "Registre des bains — novembre",
+	"texte": """  NOM              ENTRÉE   SORTIE
+
+  COLLIN, M.        21 h 10   6 h 05
+  BRUNET, A.        21 h 40   7 h 20
+  FAURE, H.         22 h 00   —
+  GARNIER, S.       22 h 15   —
+  DELORME, J.       22 h 30   —
+  BRUNET, A.        23 h 05   —
+
+  (six lignes suivantes, même écriture,
+   colonne SORTIE vide)
+
+Note du service : cesser de porter les heures de
+sortie tant que la mesure est en cours.""",
+},
+{
+	"id": "bains_protocole", "chap": 5, "niveau": -3, "genre": "dossier",
+	"lieu": ["N", "O"],
+	"titre": "Protocole — bain continu",
+	"texte": """1. Le sujet est immergé jusqu'aux épaules.
+
+2. Une toile est tendue au-dessus de la baignoire
+   et fermée au cou. Le sujet ne peut pas se lever
+   seul. C'est l'effet recherché.
+
+3. La température est vérifiée toutes les heures.
+   En cas de baisse, ouvrir la vanne d'appoint.
+
+4. Le sujet ne doit pas être laissé dans le noir :
+   la privation combinée de la vue et du mouvement
+   produit une agitation contraire au but.
+
+   (Cette clause est rayée. Au-dessus, d'une autre
+   main : « ne s'applique pas aux sujets de
+   Phase III ».)""",
+},
+{
+	"id": "bains_delorme", "chap": 5, "niveau": -3, "genre": "dossier",
+	"lieu": ["B", "O"],
+	"titre": "Fiche de bain — DELORME, Jeanne",
+	"texte": """DELORME, Jeanne — 11 ans — ch. 5
+Phase III achevée le 2 septembre.
+
+Motif de descente : a parlé après l'extinction.
+A recommencé après rappel à l'ordre.
+
+Entrée : 4 novembre, 22 h 30.
+
+Observations horaires :
+  23 h 30   calme
+  00 h 30   calme
+  01 h 30   calme, demande si quelqu'un est là
+  02 h 30   calme
+  03 h 30   —
+  04 h 30   —
+
+La surveillance de nuit n'a pas été assurée après
+3 h : la veilleuse affectée a quitté son poste.""",
+},
+{
+	"id": "carnet_marthe_5", "chap": 5, "niveau": -3, "genre": "carnet",
+	"lieu": ["C", "V", "L"],
+	"titre": "Carnet de Marthe — V",
+	"texte": """Ils ne m'ont pas renvoyée. Ils m'ont descendue.
+
+Le docteur a écrit que je n'étais plus une veilleuse.
+Il a raison. En bas, il n'y a rien à veiller : ils
+sont sanglés sous une toile et ils ne peuvent pas
+sortir, alors on n'a plus besoin de personne pour
+les surveiller.
+
+On a besoin de quelqu'un pour relever la température.
+
+Je descends les voir un par un. Je dis mon nom en
+entrant, chaque fois, parce qu'ils ne peuvent plus
+voir qui arrive et que l'eau fait du bruit.
+
+La galerie est carrelée. J'ai compris pourquoi ils
+l'ont voulue comme ça.""",
+},
+{
+	"id": "bains_chaudiere", "chap": 5, "niveau": -3, "genre": "note",
+	"lieu": ["N", "T"],
+	"titre": "Consigne de chauffe",
+	"texte": """NOURRICE PRINCIPALE — NIVEAU −3
+
+Les quatre volants de vanne ont été déposés et
+rangés séparément sur ordre du service.
+
+Sans eux, l'eau des bassins ne peut être ni
+réchauffée ni vidangée.
+
+Cette mesure est provisoire. Elle vise à empêcher
+qu'une personne non habilitée n'ouvre les vidanges
+pendant la nuit.
+
+                              Visa : L. LACAZE""",
+},
+{
+	"id": "bains_graffiti", "chap": 5, "niveau": -3, "genre": "mur",
+	"lieu": ["B", "V"],
+	"titre": "Sous le carrelage descellé",
+	"texte": """Gravé dans le joint, à hauteur de baignoire,
+par quelqu'un qui ne pouvait pas voir ce qu'il
+écrivait — les lettres se chevauchent :
+
+      J E   N E   D O R S   P A S
+
+      D I S   T O N   N O M""",
 },
 ]
 

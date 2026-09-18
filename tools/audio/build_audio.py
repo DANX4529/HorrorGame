@@ -111,6 +111,51 @@ def step_concrete(i):
     return sfx.norm(sfx.room(x, 0.55, 0.30, 600 + i), 0.80)
 
 
+def step_eau(i):
+    """Pas dans l'eau stagnante.
+
+    Le pas lui-même est ÉTOUFFÉ — l'eau amortit l'impact — et c'est
+    l'éclaboussure qui porte. Faire l'inverse (un pas net plus une giclée)
+    sonne comme deux sons superposés au lieu d'un seul geste.
+    """
+    sec = sfx.trim(sfx.load(OW("Footsteps", LINO[i])), tail_ms=200)
+    sec = S.lowpass(sec, 900, 0.7)                       # noyé
+    sec = sfx.pitch(sec, 0.94 + 0.03 * i)
+
+    # gerbe : bande large qui s'effondre vers le grave
+    n = len(sec)
+    gerbe = S.bandpass(S.pink(n / SR, 300 + i * 7), 700, 0.9)
+    gerbe *= S.env_curve(n / SR, [(0, 0), (0.02, 1.0), (0.18, 0.30), (0.55, 0.05), (1, 0)])
+    # le « plouf » grave, qui donne la masse d'eau
+    masse = S.thud(n / SR, 260, decay=0.06, seed=430 + i)
+    # embruns : discrets. Mesure à l'appui — montés trop haut ils faisaient de
+    # l'eau le son le PLUS brillant du jeu, plus que le verre brisé, ce qui est
+    # l'inverse de ce qu'une flaque fait entendre.
+    spray = S.bandpass(S.white(n / SR, 400 + i * 11), 3400, 2.4)
+    spray *= S.env_curve(n / SR, [(0, 0), (0.05, 0.40), (0.30, 0.12), (1, 0)])
+
+    x = sfx.mix((sec, 0.70), (gerbe, 0.95), (masse, 0.55), (spray, 0.14))
+    x = sfx.tilt(x, low_db=+2.0, high_db=-4.0)
+    return sfx.norm(sfx.room(x, 0.62, 0.34, 700 + i), 0.82)
+
+
+def step_verre(i):
+    """Pas sur verre brisé : l'impact, puis la centaine de petits éclats qui
+    se replacent. C'est la QUEUE qui fait le bruit, pas le choc."""
+    sec = sfx.trim(sfx.load(FZ(STONE[i])), tail_ms=220)
+    sec = sfx.pitch(sec, 0.99 + 0.02 * i)
+    n = len(sec)
+    craq = S.crackle(n / SR, density=560 + i * 40, seed=800 + i, f_lo=3200, f_hi=12000,
+                     decay=0.11)
+    craq *= S.env_curve(n / SR, [(0, 0), (0.03, 1.0), (0.30, 0.45), (1, 0)])
+    tinte = S.material_modes(S.transient(0.02, 6500, seed=810 + i), 3100, 0.22, n=5,
+                             spread=1.9, seed=820 + i)
+    tinte = S.fit(tinte, n)
+    x = sfx.mix((sec, 0.55), (craq, 0.95), (tinte, 0.30))
+    x = sfx.tilt(x, low_db=-5.0, high_db=+5.0)
+    return sfx.norm(sfx.room(x, 0.58, 0.32, 760 + i), 0.86)
+
+
 def step_entity(i):
     """
     La Veilleuse : le même pas descendu d'une octave, assombri, et traîné.
@@ -608,6 +653,8 @@ BANK = {
 for _i in range(4):
     BANK[f"step_lino_{_i+1}"] = (lambda i: (lambda: step_lino(i)))(_i)
     BANK[f"step_concrete_{_i+1}"] = (lambda i: (lambda: step_concrete(i)))(_i)
+    BANK[f"step_eau_{_i+1}"] = (lambda i: (lambda: step_eau(i)))(_i)
+    BANK[f"step_verre_{_i+1}"] = (lambda i: (lambda: step_verre(i)))(_i)
 for _i in range(3):
     BANK[f"step_entity_{_i+1}"] = (lambda i: (lambda: step_entity(i)))(_i)
     BANK[f"creak_{_i+1}"] = (lambda i: (lambda: creak(i)))(_i)

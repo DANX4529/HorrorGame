@@ -40,6 +40,15 @@ PAL = {
     "flesh_dark":   (0.357, 0.302, 0.286),
     "paper":        (0.686, 0.647, 0.549),
     "water_stain":  (0.400, 0.322, 0.204),
+    # Les bains (niveau -3) : la faïence d'hydrothérapie tire au bleu, et tout
+    # ce qui est en laiton a viré au vert-de-gris.
+    "faience":      (0.776, 0.808, 0.784),
+    "faience_bleu": (0.545, 0.639, 0.647),
+    "eau_sombre":   (0.055, 0.082, 0.078),
+    "eau_reflet":   (0.180, 0.239, 0.239),
+    "vert_gris":    (0.353, 0.510, 0.451),
+    "laiton":       (0.494, 0.427, 0.243),
+    "email":        (0.831, 0.839, 0.812),
 }
 
 
@@ -454,6 +463,177 @@ def hair_dark(res=512, seed=151):
                 normal_strength=1.8)
 
 
+# ==========================================================================
+#  Les bains — niveau -3
+# ==========================================================================
+def bath_tile(res=1024, seed=201):
+    """Faïence d'hydrothérapie : grands carreaux clairs, coulures de
+    vert-de-gris sous chaque fixation, et le tartre qui monte du sol."""
+    tile, tid, (fx, fy) = N.brick_grid(res, cols=4, rows=8, offset=0.0, mortar=0.022)
+
+    var = N.per_tile_random(tid, seed, 0.86, 1.04)
+    base = N.mix_rgb(_solid(res, "faience"), _solid(res, "faience_bleu"),
+                     N.per_tile_random(tid, seed + 3, 0.0, 1.0) * 0.55)
+    base *= var[..., None]
+
+    # joints, gorgés d'humidité donc plus sombres que dans le reste du bâtiment
+    grout_m = 1.0 - tile
+    col = N.mix_rgb(base, _solid(res, "grout") * 0.70, grout_m)
+
+    # Coulures de vert-de-gris, sous les fixations. Franches : c'est le seul
+    # signe qui distingue la salle d'eau d'un couloir carrelé ordinaire.
+    coul = N.clamp01(N.drips(res, 40, seed + 5, drop=0.80, spread=3.2) * 2.2)
+    col = N.mix_rgb(col, _solid(res, "vert_gris"), coul * 0.72)
+
+    # Tartre : des plaques, PAS un dégradé vertical. Le carrelage se répète sur
+    # trois mètres de haut ; un dégradé se lirait comme des bandes régulières,
+    # ce qui est exactement ce qu'une texture tuilable ne doit pas faire.
+    tartre = N.clamp01((N.fbm(res, 4, 6, seed=seed + 6) - 0.50) * 3.6)
+    tartre = N.clamp01(tartre + N.clamp01((N.fbm(res, 9, 4, seed=seed + 10) - 0.62) * 3.0) * 0.6)
+    col = N.mix_rgb(col, np.broadcast_to(np.array([0.878, 0.882, 0.847], np.float32),
+                                         (res, res, 3)).copy(), tartre * 0.70)
+
+    craze = N.clamp01((N.ridged(res, 14, 5, seed=seed + 7) - 0.72) * 5.0) * tile
+    col *= (1.0 - craze * 0.30)[..., None]
+
+    h = tile * 0.85 + grout_m * 0.06 - craze * 0.20 + tartre * 0.10
+    # l'émail est lisse ; le joint, le tartre et la coulure ne le sont pas
+    rough = 0.10 + grout_m * 0.70 + tartre * 0.60 + coul * 0.45
+    return dict(albedo=N.clamp01(col), height=N.normalize(h),
+                rough=N.clamp01(rough), metal=np.zeros((res, res), np.float32),
+                normal_strength=2.0)
+
+
+def bath_floor(res=1024, seed=211):
+    """Mosaïque de sol, petits carreaux hexagonaux, toujours humide."""
+    tid, edge = N.voronoi_cells(res, cells=26, seed=seed, jitter=0.35)
+    tile = N.clamp01((edge - 0.10) * 7.0)
+    grout_m = 1.0 - tile
+
+    var = N.per_tile_random(tid, seed + 1, 0.70, 1.02)
+    base = N.mix_rgb(_solid(res, "faience"), _solid(res, "faience_bleu"),
+                     N.per_tile_random(tid, seed + 2, 0.0, 1.0) * 0.80)
+    base *= var[..., None]
+    col = N.mix_rgb(base, _solid(res, "grout") * 0.58, grout_m)
+
+    # flaques : des zones franchement plus sombres et beaucoup plus lisses.
+    # C'est le même masque qui assombrit et qui polit — sinon l'eau se voit
+    # comme une tache de peinture au lieu d'une surface mouillée.
+    flaque = N.clamp01((N.fbm(res, 3, 5, seed=seed + 4) - 0.46) * 3.2)
+    flaque = N.blur(flaque, 2.0)
+    col = N.mix_rgb(col, _solid(res, "eau_sombre"), flaque * 0.72)
+
+    crasse = N.clamp01(N.fbm(res, 6, 6, seed=seed + 5) * 1.2 - 0.35)
+    col = N.mix_rgb(col, _solid(res, "grime"), crasse * grout_m * 0.7)
+
+    h = tile * 0.72 + grout_m * 0.05 - flaque * 0.25
+    rough = 0.34 + grout_m * 0.50 - flaque * 0.30
+    return dict(albedo=N.clamp01(col), height=N.normalize(h),
+                rough=N.clamp01(rough), metal=np.zeros((res, res), np.float32),
+                normal_strength=1.7)
+
+
+def water_dark(res=512, seed=221):
+    """Eau stagnante. Presque noire, très lisse, avec le voile qui s'est formé
+    en surface — c'est la rugosité qui fait lire l'eau, pas la couleur."""
+    ond = N.fbm(res, 5, 5, seed=seed) * 0.6 + N.fbm(res, 11, 4, seed=seed + 1) * 0.4
+    col = N.mix_rgb(_solid(res, "eau_sombre"), _solid(res, "eau_reflet"),
+                    N.clamp01((ond - 0.45) * 1.6) * 0.45)
+
+    # voile / pellicule : des plaques irisées immobiles
+    voile = N.clamp01((N.fbm(res, 4, 6, seed=seed + 2) - 0.56) * 4.5)
+    col = N.mix_rgb(col, _solid(res, "vert_gris") * 0.55, voile * 0.5)
+
+    # débris flottants
+    deb = N.clamp01((N.worley(res, 30, seed + 3) - 0.86) * 12.0)
+    col = N.mix_rgb(col, _solid(res, "grime"), deb * 0.7)
+
+    h = ond * 0.5 + voile * 0.2
+    # presque miroir là où le voile n'a pas pris
+    rough = 0.05 + voile * 0.55 + deb * 0.4
+    return dict(albedo=N.clamp01(col), height=N.normalize(h),
+                rough=N.clamp01(rough), metal=np.zeros((res, res), np.float32),
+                normal_strength=0.9)
+
+
+def glass_shards(res=512, seed=231):
+    """Champ de verre brisé au sol. Des éclats francs, pas du bruit : c'est
+    l'arête nette qui dit « ça va craquer sous le pied »."""
+    tid, edge = N.voronoi_cells(res, cells=18, seed=seed, jitter=1.0)
+    eclat = N.clamp01((edge - 0.04) * 16.0)
+    joint = 1.0 - eclat
+
+    lum = N.per_tile_random(tid, seed + 1, 0.55, 1.25)
+    col = _solid(res, "faience") * 0.55 * lum[..., None]
+    col = N.mix_rgb(col, _solid(res, "eau_sombre"), joint * 0.85)
+
+    # chaque éclat renvoie la lumière différemment selon son inclinaison
+    incl = N.per_tile_random(tid, seed + 2, 0.0, 1.0)
+    col *= (0.7 + 0.8 * incl)[..., None]
+
+    poussiere = N.fbm(res, 8, 5, seed=seed + 3)
+    col = N.mix_rgb(col, _solid(res, "grime"), N.clamp01(poussiere - 0.5) * 0.5)
+
+    h = eclat * (0.35 + 0.65 * incl)
+    rough = 0.08 + joint * 0.75 + N.clamp01(poussiere - 0.5) * 0.5
+    return dict(albedo=N.clamp01(col), height=N.normalize(h),
+                rough=N.clamp01(rough), metal=np.zeros((res, res), np.float32),
+                normal_strength=3.0)
+
+
+def email(res=512, seed=251):
+    """Émail de fonte : blanc crémeux, dur, et qui s'écaille par plaques
+    jusqu'à la fonte noire en dessous. C'est l'éclat qui date l'objet."""
+    fond = N.fbm(res, 30, 4, seed=seed) * 0.08 + 0.96
+    col = _solid(res, "email") * fond[..., None]
+
+    # craquelures fines dans l'émail
+    craze = N.clamp01((N.ridged(res, 16, 5, seed=seed + 1) - 0.68) * 5.0)
+    col *= (1.0 - craze * 0.28)[..., None]
+
+    # éclats : bords nets, fonte sombre au fond. Le liseré rouillé autour est
+    # ce qui distingue un éclat d'une simple tache.
+    eclats = N.clamp01((N.fbm(res, 7, 5, seed=seed + 2) - 0.62) * 7.0)
+    halo = N.clamp01(N.blur(eclats, 2.5) * 2.0 - eclats)
+    col = N.mix_rgb(col, _solid(res, "rust"), halo * 0.55)
+    col = N.mix_rgb(col, _solid(res, "steel_dark") * 0.8, eclats)
+
+    crasse = N.clamp01(N.drips(res, 16, seed + 3, drop=0.40) * 1.4)
+    col = N.mix_rgb(col, _solid(res, "water_stain"), crasse * 0.35)
+
+    h = 0.6 - eclats * 0.5 - craze * 0.12
+    rough = 0.09 + eclats * 0.72 + halo * 0.45 + crasse * 0.30 + craze * 0.15
+    return dict(albedo=N.clamp01(col), height=N.normalize(h),
+                rough=N.clamp01(rough), metal=N.clamp01(eclats * 0.55),
+                normal_strength=2.0)
+
+
+def metal_verdigris(res=1024, seed=241):
+    """Laiton oxydé : robinetterie et tuyauterie des bains. Le vert-de-gris
+    ne ronge pas comme la rouille, il se dépose — d'où des plaques nettes."""
+    grain = N.fbm(res, 22, 5, seed=seed) * 0.5 + N.fbm(res, 60, 3, seed=seed + 1) * 0.5
+    col = _solid(res, "laiton") * (0.72 + 0.55 * grain)[..., None]
+
+    plaques = N.clamp01((N.fbm(res, 5, 6, seed=seed + 2) - 0.44) * 3.4)
+    plaques = N.clamp01(plaques + N.drips(res, 18, seed + 3, drop=0.5) * 0.6)
+    col = N.mix_rgb(col, _solid(res, "vert_gris"), plaques * 0.88)
+
+    # cœurs de plaque, plus clairs et plus poudreux
+    coeur = N.clamp01((plaques - 0.55) * 3.0)
+    col = N.mix_rgb(col, np.broadcast_to(np.array([0.541, 0.694, 0.620], np.float32),
+                                         (res, res, 3)).copy(), coeur * 0.55)
+
+    ray = N.scratches(res, 90, seed + 4, length=0.10, width=1.2)
+    col = N.mix_rgb(col, _solid(res, "laiton") * 1.25, N.clamp01(ray) * (1.0 - plaques) * 0.6)
+
+    h = grain * 0.25 + plaques * 0.55 + coeur * 0.25
+    # le métal nu reste lisse, le dépôt est mat
+    rough = 0.24 + plaques * 0.62 + coeur * 0.25
+    metal = N.clamp01(0.92 - plaques * 0.78)
+    return dict(albedo=N.clamp01(col), height=N.normalize(h),
+                rough=N.clamp01(rough), metal=metal, normal_strength=1.8)
+
+
 RECIPES = {
     "wall_tile": wall_tile,
     "wall_plaster": wall_plaster,
@@ -470,7 +650,15 @@ RECIPES = {
     "glass_dirty": glass_dirty,
     "grime_dark": grime_dark,
     "hair_dark": hair_dark,
+    # Les bains (niveau -3)
+    "bath_tile": bath_tile,
+    "bath_floor": bath_floor,
+    "water_dark": water_dark,
+    "glass_shards": glass_shards,
+    "metal_verdigris": metal_verdigris,
+    "email": email,
 }
+
 
 
 # ==========================================================================

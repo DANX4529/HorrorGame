@@ -219,6 +219,141 @@ const ETAGES := [
 			],
 		},
 	},
+	{
+		"niveau": -3,
+		"titre": "Les bains",
+		"chapitres": [5],
+
+		# L'hydrothérapie. Un plan en PEIGNE plutôt qu'en anneau : une longue
+		# galerie et ses alcôves. On ne peut plus tourner autour d'elle
+		# indéfiniment -- il faut choisir une dent et s'y engager, ce qui est
+		# tout le sujet d'un étage où le sol dit où l'on est.
+		#
+		# .  maçonnerie      C  galerie        B  salle des bains (inondée)
+		# V  vestiaires      O  solarium (verre brisé)    L  lingerie humide
+		# N  chaufferie d'eau (nourrice)   T  local technique   M  monte-charge
+		"carte": [
+			"..............",
+			".BBB.BBB.OOO..",
+			".BBB.BBB.OOO..",
+			".BBB.BBB.OOO..",
+			".CCCCCCCCCCC..",
+			".CCCCCCCCCCC..",
+			".VV..NNN...LL.",
+			".VV..NNN...LL.",
+			".....TTM......",
+			"..............",
+		],
+		"portes": [
+			[2, 3, "S"],            # bains ouest -> galerie
+			[6, 3, "S"],            # bains est -> galerie
+			[10, 3, "S"],           # solarium -> galerie
+			[2, 6, "N"],            # vestiaires -> galerie
+			[6, 6, "N"],            # nourrice -> galerie
+			[11, 6, "N"],           # lingerie humide -> galerie
+			[5, 8, "N"],            # local technique -> nourrice
+		],
+		"ouvertures": [
+			[7, 8, "W"],            # local technique -> monte-charge
+		],
+		"lettres_beton": ["T", "M", "N"],
+		"cellule_tableau": Vector2i(5, 8),
+		"veilleuses": [
+			Vector2i(1, 4), Vector2i(11, 4), Vector2i(1, 5), Vector2i(11, 5),
+			Vector2i(6, 4), Vector2i(2, 6), Vector2i(10, 1), Vector2i(2, 1),
+			Vector2i(6, 1),
+		],
+		"depart": Vector2i(6, 8),
+		"depart_ecart": Vector3(0.8, 0.0, 0.8),
+		"ronde": ["C", "B", "O", "V", "N", "L"],
+		"ailes": ["B", "O", "V", "N", "L"],
+		"piles": ["C", "V", "L", "O", "B"],
+		"objectif": {
+			"nombre": 4,
+			"objet": "Volant de vanne",
+			"pluriel": "volants de vanne",
+			"panneau": "Nourrice principale",
+			"modele": "valve",
+		},
+
+		# LE SOL PARLE. C'est la mécanique de l'étage : l'eau porte, le verre
+		# porte davantage, le carrelage sec est ordinaire. Choisir son chemin
+		# devient le vrai problème, et on l'entend avant de le comprendre.
+		"sols": {
+			"B": {"kind": "eau", "bruit": 1.70, "materiau": "water_dark"},
+			"O": {"kind": "verre", "bruit": 2.10, "materiau": "glass_shards"},
+			"L": {"kind": "eau", "bruit": 1.45, "materiau": "water_dark"},
+			"V": {"kind": "lino", "bruit": 0.80},
+		},
+		"voie_traversante": true,
+		"veilleuse": {},
+		"lampe": true,
+		"jetables": 6,
+
+		# Tout l'étage est repeint sans dupliquer un seul modèle.
+		"materiaux": {
+			"wall_tile": "bath_tile",
+			"floor_lino": "bath_floor",
+			"metal_rust": "metal_verdigris",
+		},
+
+		"mobilier": {
+			"B": [
+				{"prop": "bathtub", "chance": 0.80, "ecart": 1.0, "rot": 0.0,
+				 "boite": Vector3(0.80, 0.90, 1.80)},
+				{"prop": "shower_head", "chance": 0.45,
+				 "pos": Vector3(0, 1.85, -1.93), "rot": 0.0},
+				{"prop": "floor_drain", "chance": 0.55, "ecart": 1.3},
+				{"prop": "bucket", "chance": 0.30, "ecart": 1.4,
+				 "boite": Vector3(0.32, 0.42, 0.32)},
+			],
+			"O": [
+				{"prop": "massage_table", "chance": 0.62, "ecart": 1.0, "rot": 0.0,
+				 "boite": Vector3(0.70, 0.90, 1.90)},
+				{"prop": "stool", "chance": 0.45, "ecart": 1.4,
+				 "boite": Vector3(0.40, 0.50, 0.40)},
+				{"prop": "basin", "chance": 0.40, "unique": true,
+				 "pos": Vector3(0, 0.98, -1.93), "rot": 0.0},
+			],
+			"V": [
+				{"prop": "changing_cabin", "chance": 0.70, "ecart": 0.8, "rot": 0.0,
+				 "boite": Vector3(1.05, 2.10, 1.00)},
+				{"prop": "bench", "chance": 0.50, "ecart": 1.1, "rot": 0.0,
+				 "boite": Vector3(1.55, 0.50, 0.45)},
+				{"prop": "coat_rack", "chance": 0.55, "unique": true,
+				 "pos": Vector3(0, 1.74, -1.93), "rot": 0.0},
+			],
+			"N": [
+				{"prop": "pipe_bank", "chance": 0.85,
+				 "pos": Vector3(0, 1.55, -1.93), "rot": 0.0},
+				{"prop": "bucket", "chance": 0.40, "ecart": 1.3,
+				 "boite": Vector3(0.32, 0.42, 0.32)},
+				{"prop": "stool", "chance": 0.35, "ecart": 1.3,
+				 "boite": Vector3(0.40, 0.50, 0.40)},
+			],
+			"L": [
+				{"prop": "shelving", "chance": 0.75, "ecart": 1.0,
+				 "boite": Vector3(0.95, 1.90, 0.40)},
+				{"prop": "laundry_cart", "chance": 0.55, "unique": true, "ecart": 1.1,
+				 "boite": Vector3(0.75, 0.90, 0.55)},
+				{"prop": "hose_coil", "chance": 0.50, "unique": true,
+				 "pos": Vector3(0, 1.66, -1.93), "rot": 0.0},
+			],
+			"C": [
+				{"prop": "floor_drain", "chance": 0.22, "ecart": 1.5},
+				{"prop": "bucket", "chance": 0.12, "ecart": 1.5,
+				 "boite": Vector3(0.32, 0.42, 0.32)},
+				{"prop": "hose_coil", "chance": 0.16, "unique": true,
+				 "pos": Vector3(0, 1.66, -1.93), "rot": 0.0},
+				{"prop": "basin", "chance": 0.18, "unique": true,
+				 "pos": Vector3(1.2, 0.98, -1.93), "rot": 0.0},
+			],
+			"T": [
+				{"prop": "pipe_bank", "chance": 0.50, "unique": true,
+				 "pos": Vector3(0, 1.55, -1.93), "rot": 0.0},
+			],
+		},
+	},
 ]
 
 

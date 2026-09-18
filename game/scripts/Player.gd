@@ -42,6 +42,8 @@ var _step_t := 0.0
 var _bob := 0.0
 var _shake := 0.0
 var _floor_kind := "lino"
+## De combien le sol multiplie la PORTÉE du pas. 1.0 = sol ordinaire.
+var _floor_noise := 1.0
 var jetables := 0
 var _breath_player: AudioStreamPlayer
 var _heart_player: AudioStreamPlayer
@@ -262,8 +264,11 @@ func _update_steps(delta: float, sprinting: bool) -> void:
 	var n := randi_range(1, 4)
 	var db := -20.0 if crouched else (-8.0 if sprinting else -13.0)
 	# accroupi (3 m) le couloir ne répond pas ; en courant (18 m) il claque.
+	# Le facteur de sol passe par `scale` : c'est le MÊME paramètre qui règle
+	# le rayon entendu par la Veilleuse et l'écho de la pièce, donc ce qu'on
+	# entend et ce qu'elle perçoit ne peuvent pas diverger.
 	Audio.noise_3d("step_%s_%d" % [_floor_kind, n], global_position, kind, db,
-			randf_range(0.92, 1.08))
+			randf_range(0.92, 1.08), _floor_noise)
 	_bob = 1.0
 
 
@@ -315,6 +320,10 @@ func set_jetable_scene(s: PackedScene) -> void:
 
 func set_floor_kind(k: String) -> void:
 	_floor_kind = k
+
+
+func set_floor_noise(f: float) -> void:
+	_floor_noise = f
 
 
 # --------------------------------------------------------------------------

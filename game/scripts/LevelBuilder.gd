@@ -57,6 +57,14 @@ var fusebox: Node3D = null
 var exit_gate: Node3D = null
 var _rng := RandomNumberGenerator.new()
 
+## Lettres de salle que ce fichier sait habiller.
+##
+## Déclarée ici et lue par --etagetest : la liste des lettres connues vivait
+## dans le test, donc ajouter une salle obligeait à corriger le test — et un
+## oubli s'y lisait comme un défaut de l'étage plutôt que de la liste.
+const LETTRES_HABILLEES := ["C", "D", "E", "S", "A", "H", "R", "T", "M", "W",
+		"P", "G", "B", "O", "V", "N", "L"]
+
 const NAV_RES := 0.5                 # pas de la grille de navigation, en mètres
 const AGENT_R := 0.42                # rayon d'encombrement de la Veilleuse
 ## Demi-largeur de la voie gardée libre au centre de chaque couloir. Elle doit
@@ -86,6 +94,8 @@ func build(seed_val := 0, etage_def: Dictionary = {}) -> void:
 	lettres_ronde = etage.get("ronde", ["C", "D", "E", "S", "A", "W", "R"])
 	lettres_ailes = etage.get("ailes", ["D", "E", "S", "A", "W", "R"])
 	lettres_piles = etage.get("piles", ["C", "H", "D", "E", "S", "R"])
+	# AVANT _load_scenes : les matériaux s'appliquent à l'instanciation.
+	MaterialLib.poser_substituts(etage.get("materiaux", {}))
 	_valider_etage()
 	_load_scenes()
 	_parse_map()
@@ -152,7 +162,11 @@ func _load_scenes() -> void:
 			# pavillon C (niveau -2)
 			"gurney", "screen", "trolley", "counter", "bench", "long_table",
 			"shelving", "laundry_cart", "wall_clock", "notice_board",
-			"wall_phone", "coat_rack"]:
+			"wall_phone", "coat_rack",
+			# les bains (niveau -3)
+			"bathtub", "shower_head", "massage_table", "changing_cabin",
+			"pipe_bank", "basin", "floor_drain", "bucket", "stool",
+			"hose_coil", "valve"]:
 		# les casiers et le tableau électrique sont exportés en deux objets
 		# (caisson + porte) mais proviennent d'un même fichier .glb
 		var base: String = n
@@ -280,7 +294,15 @@ func _build_shell() -> void:
 		var c: String = _cells[cell]
 		var beton := _is_beton(c)
 		var p := world_of(cell.x, cell.y)
-		_place(shell, "floor_concrete" if beton else "floor_lino", p, 0.0, true)
+		var sol_inst := _place(shell, "floor_concrete" if beton else "floor_lino", p, 0.0, true)
+		# Le sol de la case peut imposer son propre matériau : une salle inondée
+		# doit SE VOIR inondée, pas seulement s'entendre. Sans ça la texture
+		# d'eau et celle de verre brisé existent sur le disque sans jamais
+		# apparaître, et la mécanique de l'étage n'a pas de support visuel.
+		if sol_inst and sols.has(c):
+			var mat_sol: String = str((sols[c] as Dictionary).get("materiau", ""))
+			if mat_sol != "":
+				MaterialLib.forcer(sol_inst, mat_sol)
 		var ceil_inst := _place(shell, "ceiling_concrete" if beton else "ceiling", p, 0.0, false)
 		if ceil_inst:
 			ceil_inst.add_to_group("ceiling")
@@ -415,8 +437,71 @@ func _dress_rooms() -> void:
 			"W":      _dress_eau(props, p, cell)
 			"P":      _dress_commune(props, p, cell)
 			"G":      _dress_garde(props, p, cell)
+			"B":      _dress_bains(props, p, cell)
+			"O":      _dress_solarium(props, p, cell)
+			"V":      _dress_vestiaires(props, p, cell)
+			"N":      _dress_nourrice(props, p, cell)
+			"L":      _dress_lingerie(props, p, cell)
+			_:
+				# Une lettre sans habillage donne une pièce vide, ce qui ne
+				# lève rien : on le dit.
+				push_warning("Aucun habillage pour la salle '%s'" % c)
 			"C":      _dress_couloir(props, p, cell)
 		_mobilier_etage(props, p, cell, c)
+
+
+# --------------------------------------------------------------------------
+#  Les bains (niveau -3)
+#
+#  L'habillage de base reste MAIGRE ici : c'est la table de mobilier de
+#  l'étage qui pose les baignoires, les cabines et la nourrice. On ne met dans
+#  ces fonctions que ce qui doit être là à tous les coups — au premier rang
+#  desquelles les cachettes, sans lesquelles l'étage n'est pas jouable.
+# --------------------------------------------------------------------------
+func _dress_bains(p: Node3D, o: Vector3, _cell: Vector2i) -> void:
+	_prop(p, "radiator", o + Vector3(1.55, 0, -1.88), 0.0)
+	if _rng.randf() < 0.30:
+		_prop(p, "debris", o + Vector3(_r(-1.3, 1.3), 0, _r(-1.3, 1.3)), _r(0, TAU))
+	if _rng.randf() < 0.34:
+		_add_locker(p, o + Vector3(-1.66, 0, 1.55), PI * 0.5)
+
+
+func _dress_solarium(p: Node3D, o: Vector3, _cell: Vector2i) -> void:
+	# la verrière a cédé : le verre est au sol, et c'est le sol qui le dit
+	for i in 2:
+		if _rng.randf() < 0.55:
+			_prop(p, "debris", o + Vector3(_r(-1.5, 1.5), 0, _r(-1.5, 1.5)), _r(0, TAU))
+	if _rng.randf() < 0.42:
+		_prop(p, "chair", o + Vector3(_r(-1.2, 1.2), 0, _r(-1.2, 1.2)), _r(0, TAU),
+				Vector3(0.45, 0.95, 0.45))
+	if _rng.randf() < 0.40:
+		_add_locker(p, o + Vector3(1.66, 0, -1.55), -PI * 0.5)
+
+
+func _dress_vestiaires(p: Node3D, o: Vector3, _cell: Vector2i) -> void:
+	# les vestiaires sont la réserve de cachettes de l'étage : deux par case
+	_add_locker(p, o + Vector3(-1.66, 0, -1.50), PI * 0.5)
+	_add_locker(p, o + Vector3(1.66, 0, -1.50), -PI * 0.5)
+	if _rng.randf() < 0.45:
+		_prop(p, "papers", o + Vector3(_r(-1.0, 1.0), 0.01, _r(-1.0, 1.0)), _r(0, TAU))
+
+
+func _dress_nourrice(p: Node3D, o: Vector3, cell: Vector2i) -> void:
+	if cell == cellule_tableau:
+		return
+	_prop(p, "pipe_junction", o + Vector3(_r(-1.0, 1.0), 0, -1.80), _r(-0.2, 0.2))
+	if _rng.randf() < 0.45:
+		_prop(p, "crate", o + Vector3(_r(-1.2, 1.2), 0, _r(-1.2, 1.2)), _r(0, TAU),
+				Vector3(0.70, 0.55, 0.70))
+	if _rng.randf() < 0.30:
+		_add_locker(p, o + Vector3(1.64, 0, 1.55), -PI * 0.5)
+
+
+func _dress_lingerie(p: Node3D, o: Vector3, _cell: Vector2i) -> void:
+	if _rng.randf() < 0.55:
+		_prop(p, "crate", o + Vector3(_r(-1.2, 1.2), 0, _r(-1.2, 1.2)), _r(0, TAU),
+				Vector3(0.70, 0.55, 0.70))
+	_add_locker(p, o + Vector3(-1.66, 0, 1.55), PI * 0.5)
 
 
 ## Mobilier propre à l'étage, posé PAR-DESSUS l'habillage commun.

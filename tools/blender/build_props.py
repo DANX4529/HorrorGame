@@ -852,6 +852,237 @@ def coat_rack(name="coat_rack"):
     return [B.finish(bm, name, ["wood_old", "metal_rust", "cloth_gown"])]
 
 
+
+# ==========================================================================
+#  Les bains — niveau -3
+#
+#  L'hydrothérapie du Mont-Cendre : baignoires scellées, jets, tables
+#  d'enveloppement. Tout ce qui est en laiton a viré au vert-de-gris.
+# ==========================================================================
+def bathtub(name="bathtub"):
+    """Baignoire de balnéothérapie, fonte émaillée sur pieds griffes.
+
+    Bâtie en PAROIS et non en bloc : une cuve creusée par un pavé intérieur
+    ne se voit pas — de l'extérieur on n'a qu'un bloc plein, et c'est le prop
+    qui doit dire d'un coup d'œil où l'on se trouve.
+    """
+    W, D, H = 0.74, 1.72, 0.62
+    Z0, EP = 0.16, 0.055                      # hauteur du dessous, épaisseur
+    bm = B.bm_new()
+    # fond
+    B.box(bm, size=(W, D, EP), center=(0, 0, Z0 + EP * 0.5), mat=0)
+    # quatre parois
+    for sx in (-1, 1):
+        B.box(bm, size=(EP, D, H), center=(sx * (W - EP) * 0.5, 0, Z0 + H * 0.5), mat=0)
+    for sy in (-1, 1):
+        B.box(bm, size=(W - EP * 2, EP, H), center=(0, sy * (D - EP) * 0.5, Z0 + H * 0.5),
+              mat=0)
+    # rebord roulé
+    for sx in (-1, 1):
+        B.cylinder(bm, EP * 0.6, D, 10, center=(sx * (W - EP) * 0.5, 0, Z0 + H),
+                   rot=(PI / 2, 0, 0), mat=0)
+    for sy in (-1, 1):
+        B.cylinder(bm, EP * 0.6, W - EP * 2, 10, center=(0, sy * (D - EP) * 0.5, Z0 + H),
+                   rot=(0, PI / 2, 0), mat=0)
+    for sy in (-1, 1):                                       # pieds griffes
+        for sx in (-1, 1):
+            B.cylinder(bm, 0.045, Z0, 10,
+                       center=(sx * (W * 0.5 - 0.09), sy * (D * 0.5 - 0.14), Z0 * 0.5), mat=2)
+            B.sphere(bm, 0.055, 10, 6,
+                     center=(sx * (W * 0.5 - 0.09), sy * (D * 0.5 - 0.14), 0.05),
+                     scale=(1, 1, 0.7), mat=2)
+    # robinetterie en bout
+    B.cylinder(bm, 0.030, 0.16, 10, center=(0, -D * 0.5 + 0.10, Z0 + H + 0.20),
+               rot=(PI / 2, 0, 0), mat=2)
+    B.cylinder(bm, 0.022, 0.13, 10, center=(0, -D * 0.5 + 0.02, Z0 + H + 0.15), mat=2)
+    for sx in (-1, 1):
+        B.torus(bm, 0.045, 0.010, 12, 6,
+                center=(sx * 0.15, -D * 0.5 + 0.06, Z0 + H + 0.06), rot=(PI / 2, 0, 0), mat=2)
+    # eau croupie au fond, presque affleurante
+    B.box(bm, size=(W - EP * 2.4, D - EP * 2.4, 0.012),
+          center=(0, 0, Z0 + EP + 0.10), mat=1)
+    B.cylinder(bm, 0.035, 0.014, 12, center=(0, D * 0.5 - 0.24, Z0 + EP + 0.01), mat=2)
+    B.bevel_sharp(bm, 0.003, 1)
+    B.uv_world_box(bm, scale=0.7)
+    return [B.finish(bm, name, ["email", "water_dark", "metal_verdigris"],
+                     smooth_angle=True)]
+
+
+def shower_head(name="shower_head"):
+    """Douche à jet. Origine au mur (Y=0), dépasse vers -Y."""
+    bm = B.bm_new()
+    B.box(bm, size=(0.10, 0.04, 0.16), center=(0, -0.02, 0), mat=0)
+    B.tube(bm, 0.018, 1, 10, (0, -0.03, 0.02), (0, -0.03, 0.62), mat=0)
+    B.tube(bm, 0.018, 1, 10, (0, -0.03, 0.62), (0, -0.30, 0.62), mat=0)
+    B.cylinder(bm, 0.075, 0.045, 16, center=(0, -0.33, 0.58), rot=(0.35, 0, 0),
+               mat=0, radius_top=0.055)
+    for sx in (-1, 1):                                       # volants
+        B.torus(bm, 0.048, 0.011, 12, 6, center=(sx * 0.13, -0.03, 0.10),
+                rot=(PI / 2, 0, 0), mat=0)
+        B.tube(bm, 0.013, 1, 8, (0, -0.03, 0.10), (sx * 0.13, -0.03, 0.10), mat=0)
+    B.bevel_sharp(bm, 0.003, 1)
+    B.uv_world_box(bm, scale=0.4)
+    return [B.finish(bm, name, ["metal_verdigris"], smooth_angle=True)]
+
+
+def massage_table(name="massage_table"):
+    """Table d'enveloppement : on y roulait les pensionnaires dans des draps
+    mouillés. Sangles comprises."""
+    W, D, H = 0.66, 1.84, 0.78
+    bm = B.bm_new()
+    B.box(bm, size=(W, D, 0.06), center=(0, 0, H), mat=0)
+    B.box(bm, size=(W - 0.04, D - 0.08, 0.09), center=(0, 0, H + 0.07), mat=1)
+    for sy in (-0.55, 0.0, 0.55):                            # sangles
+        B.box(bm, size=(W + 0.03, 0.055, 0.016), center=(0, sy * D * 0.5, H + 0.12), mat=2)
+        B.box(bm, size=(0.05, 0.05, 0.10), center=(W * 0.5 + 0.01, sy * D * 0.5, H + 0.06),
+              rot=(0.3, 0, 0), mat=2)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            B.tube(bm, 0.022, 1, 8, (sx * (W * 0.5 - 0.06), sy * (D * 0.5 - 0.12), H),
+                   (sx * (W * 0.5 - 0.06), sy * (D * 0.5 - 0.12), 0.0), mat=0)
+        B.tube(bm, 0.016, 1, 6, (sx * (W * 0.5 - 0.06), -D * 0.5 + 0.12, 0.24),
+               (sx * (W * 0.5 - 0.06), D * 0.5 - 0.12, 0.24), mat=0)
+    B.bevel_sharp(bm, 0.003, 1)
+    B.uv_world_box(bm, scale=0.7)
+    return [B.finish(bm, name, ["metal_verdigris", "fabric_mattress", "cloth_gown"],
+                     smooth_angle=True)]
+
+
+def changing_cabin(name="changing_cabin"):
+    """Cabine de déshabillage : trois cloisons et une tringle. Le rideau a
+    disparu, la tringle non."""
+    W, D, Hh = 0.98, 0.92, 2.05
+    bm = B.bm_new()
+    for sx in (-1, 1):                                        # joues
+        B.box(bm, size=(0.035, D, Hh - 0.22), center=(sx * W * 0.5, 0, 0.22 + (Hh - 0.22) * 0.5),
+              mat=0)
+    B.box(bm, size=(W, 0.035, Hh - 0.22), center=(0, D * 0.5, 0.22 + (Hh - 0.22) * 0.5), mat=0)
+    B.box(bm, size=(W + 0.06, D + 0.04, 0.05), center=(0, 0, Hh), mat=0)   # linteau
+    B.tube(bm, 0.014, 1, 8, (-W * 0.5, -D * 0.5 + 0.05, Hh - 0.10),
+           (W * 0.5, -D * 0.5 + 0.05, Hh - 0.10), mat=1)      # tringle
+    for i in range(5):                                        # anneaux restants
+        B.torus(bm, 0.022, 0.005, 10, 5,
+                center=(-0.34 + i * 0.17, -D * 0.5 + 0.05, Hh - 0.10),
+                rot=(0, PI / 2, 0), mat=1)
+    B.box(bm, size=(W - 0.10, 0.22, 0.04), center=(0, D * 0.5 - 0.14, 0.44), mat=2)  # banc
+    for sx in (-1, 1):
+        B.tube(bm, 0.015, 1, 6, (sx * (W * 0.5 - 0.12), D * 0.5 - 0.14, 0.42),
+               (sx * (W * 0.5 - 0.12), D * 0.5 - 0.14, 0.0), mat=1)
+    B.bevel_sharp(bm, 0.003, 1)
+    B.uv_world_box(bm, scale=0.7)
+    return [B.finish(bm, name, ["wood_old", "metal_verdigris", "wood_old"])]
+
+
+def pipe_bank(name="pipe_bank"):
+    """Nourrice : la batterie de tuyaux et de vannes qui alimentait les bains.
+    Origine au mur (Y=0), dépasse vers -Y."""
+    bm = B.bm_new()
+    B.box(bm, size=(1.16, 0.05, 0.14), center=(0, -0.025, 1.05), mat=0)
+    for i in range(4):
+        x = -0.42 + i * 0.28
+        B.tube(bm, 0.032, 1, 10, (x, -0.08, -1.10), (x, -0.08, 1.10), mat=0)
+        B.cylinder(bm, 0.052, 0.09, 12, center=(x, -0.08, 0.10), mat=0)     # corps de vanne
+        B.tube(bm, 0.014, 1, 8, (x, -0.08, 0.15), (x, -0.20, 0.15), mat=0)
+        B.torus(bm, 0.062, 0.012, 14, 6, center=(x, -0.23, 0.15), rot=(PI / 2, 0, 0), mat=0)
+        for k in range(3):                                                   # rayons du volant
+            a = k * PI / 3.0
+            B.tube(bm, 0.008, 1, 5,
+                   (x + math.cos(a) * 0.06, -0.23, 0.15 + math.sin(a) * 0.06),
+                   (x - math.cos(a) * 0.06, -0.23, 0.15 - math.sin(a) * 0.06), mat=0)
+        B.box(bm, size=(0.10, 0.10, 0.03), center=(x, -0.08, -0.62), mat=0)  # colliers
+        B.box(bm, size=(0.10, 0.10, 0.03), center=(x, -0.08, 0.72), mat=0)
+    B.bevel_sharp(bm, 0.003, 1)
+    B.uv_world_box(bm, scale=0.5)
+    return [B.finish(bm, name, ["metal_verdigris"], smooth_angle=True)]
+
+
+def basin(name="basin"):
+    """Lavabo mural en faïence. Origine au mur (Y=0), dépasse vers -Y."""
+    bm = B.bm_new()
+    B.box(bm, size=(0.56, 0.42, 0.16), center=(0, -0.21, 0), mat=0)
+    B.box(bm, size=(0.44, 0.31, 0.10), center=(0, -0.20, 0.04), mat=0)
+    B.cylinder(bm, 0.028, 0.10, 10, center=(0, -0.05, 0.13), mat=1)
+    B.tube(bm, 0.018, 1, 8, (0, -0.05, 0.17), (0, -0.14, 0.15), mat=1)
+    for sx in (-1, 1):
+        B.torus(bm, 0.032, 0.008, 10, 5, center=(sx * 0.10, -0.05, 0.11),
+                rot=(PI / 2, 0, 0), mat=1)
+    B.tube(bm, 0.026, 1, 8, (0, -0.20, -0.08), (0, -0.20, -0.42), mat=1)  # siphon
+    B.tube(bm, 0.026, 1, 8, (0, -0.20, -0.42), (0, -0.04, -0.46), mat=1)
+    B.bevel_sharp(bm, 0.003, 1)
+    B.uv_world_box(bm, scale=0.4)
+    return [B.finish(bm, name, ["email", "metal_verdigris"], smooth_angle=True)]
+
+
+def floor_drain(name="floor_drain"):
+    """Bonde de sol. À peine 4 cm de haut, mais c'est ce qui dit que la pièce
+    était faite pour être inondée."""
+    bm = B.bm_new()
+    B.box(bm, size=(0.34, 0.34, 0.035), center=(0, 0, 0.017), mat=0)
+    B.box(bm, size=(0.24, 0.24, 0.05), center=(0, 0, 0.005), mat=1)
+    for i in range(5):
+        B.box(bm, size=(0.22, 0.016, 0.02), center=(0, -0.09 + i * 0.045, 0.030), mat=0)
+    B.bevel_sharp(bm, 0.002, 1)
+    B.uv_world_box(bm, scale=0.3)
+    return [B.finish(bm, name, ["metal_verdigris", "grime_dark"])]
+
+
+def bucket(name="bucket"):
+    bm = B.bm_new()
+    B.cylinder(bm, 0.135, 0.30, 16, center=(0, 0, 0.15), mat=0, radius_top=0.155)
+    B.cylinder(bm, 0.145, 0.016, 16, center=(0, 0, 0.30), mat=0)
+    B.torus(bm, 0.145, 0.006, 16, 5, center=(0, 0, 0.13), mat=0)
+    for sx in (-1, 1):                                        # anse
+        B.tube(bm, 0.006, 1, 5, (sx * 0.150, 0, 0.27), (sx * 0.115, 0, 0.40), mat=0)
+    B.tube(bm, 0.006, 1, 5, (-0.115, 0, 0.40), (0.115, 0, 0.40), mat=0)
+    B.bevel_sharp(bm, 0.002, 1)
+    B.uv_world_box(bm, scale=0.4)
+    return [B.finish(bm, name, ["metal_painted"], smooth_angle=True)]
+
+
+def stool(name="stool"):
+    bm = B.bm_new()
+    B.cylinder(bm, 0.17, 0.035, 14, center=(0, 0, 0.44), mat=0)
+    for i in range(3):
+        a = i * 2 * PI / 3
+        B.tube(bm, 0.014, 1, 6, (math.cos(a) * 0.12, math.sin(a) * 0.12, 0.42),
+               (math.cos(a) * 0.19, math.sin(a) * 0.19, 0.0), mat=1)
+    B.torus(bm, 0.145, 0.008, 14, 5, center=(0, 0, 0.16), mat=1)
+    B.bevel_sharp(bm, 0.002, 1)
+    B.uv_world_box(bm, scale=0.4)
+    return [B.finish(bm, name, ["wood_old", "metal_verdigris"], smooth_angle=True)]
+
+
+def hose_coil(name="hose_coil"):
+    """Lance d'hydrothérapie, enroulée sur son crochet. Origine au mur."""
+    bm = B.bm_new()
+    B.box(bm, size=(0.08, 0.06, 0.10), center=(0, -0.03, 0), mat=0)
+    B.tube(bm, 0.012, 1, 6, (0, -0.05, 0), (0, -0.16, 0), mat=0)
+    for i in range(7):                                        # couronnes du tuyau
+        r = 0.20 - i * 0.012
+        B.torus(bm, r, 0.021, 20, 6, center=(0, -0.13 - (i % 2) * 0.03, -0.16),
+                rot=(PI / 2, 0, 0), mat=1)
+    B.cylinder(bm, 0.020, 0.20, 10, center=(0.16, -0.20, -0.40), rot=(0.5, 0, 0.4), mat=0)
+    B.bevel_sharp(bm, 0.002, 1)
+    B.uv_world_box(bm, scale=0.4)
+    return [B.finish(bm, name, ["metal_verdigris", "grime_dark"], smooth_angle=True)]
+
+
+def valve(name="valve"):
+    """Volant de vanne — la pièce à retrouver au niveau -3. Petit objet posé,
+    comme le fusible : origine au centre, Z=0 au sol."""
+    bm = B.bm_new()
+    B.torus(bm, 0.075, 0.014, 18, 8, center=(0, 0, 0.075), rot=(PI / 2, 0, 0), mat=0)
+    for k in range(3):
+        a = k * PI / 3.0
+        B.tube(bm, 0.010, 1, 6, (math.cos(a) * 0.072, 0, 0.075 + math.sin(a) * 0.072),
+               (-math.cos(a) * 0.072, 0, 0.075 - math.sin(a) * 0.072), mat=0)
+    B.cylinder(bm, 0.022, 0.05, 10, center=(0, 0, 0.075), rot=(PI / 2, 0, 0), mat=0)
+    B.cylinder(bm, 0.013, 0.07, 8, center=(0, -0.04, 0.075), rot=(PI / 2, 0, 0), mat=1)
+    B.bevel_sharp(bm, 0.002, 1)
+    B.uv_world_box(bm, scale=0.25)
+    return [B.finish(bm, name, ["metal_verdigris", "metal_painted"], smooth_angle=True)]
+
+
 # ==========================================================================
 PROPS = {
     "door": door, "door_metal": door_metal, "locker": locker,
@@ -866,6 +1097,11 @@ PROPS = {
     "bench": bench, "long_table": long_table, "shelving": shelving,
     "laundry_cart": laundry_cart, "wall_clock": wall_clock,
     "notice_board": notice_board, "wall_phone": wall_phone, "coat_rack": coat_rack,
+    # Les bains (niveau -3)
+    "bathtub": bathtub, "shower_head": shower_head, "massage_table": massage_table,
+    "changing_cabin": changing_cabin, "pipe_bank": pipe_bank, "basin": basin,
+    "floor_drain": floor_drain, "bucket": bucket, "stool": stool,
+    "hose_coil": hose_coil, "valve": valve,
 }
 
 

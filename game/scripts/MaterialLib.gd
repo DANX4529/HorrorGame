@@ -11,10 +11,25 @@ const NAMES := [
 	"wall_tile", "wall_plaster", "floor_concrete", "floor_lino", "ceiling_plaster",
 	"wood_old", "metal_painted", "metal_rust", "fabric_mattress", "cloth_gown",
 	"paper_aged", "skin_pale", "grime_dark", "hair_dark", "glass_dirty",
+	# Les bains (niveau -3)
+	"bath_tile", "bath_floor", "water_dark", "glass_shards", "metal_verdigris",
+	"email",
 ]
 
 var mats: Dictionary = {}
 var _missing: Dictionary = {}
+
+## Substitutions en vigueur : nom d'origine -> nom à employer.
+##
+## Les modèles d'architecture sont les mêmes à tous les étages ; ce sont leurs
+## MATÉRIAUX qui changent. Repeindre un étage entier tient donc dans une table,
+## sans dupliquer un seul .glb — et un étage qui n'en déclare pas est rendu
+## exactement comme avant.
+var substituts: Dictionary = {}
+
+
+func poser_substituts(d: Dictionary) -> void:
+	substituts = d
 
 
 func _ready() -> void:
@@ -41,12 +56,29 @@ func apply(root: Node) -> void:
 			var key := ""
 			if src != null:
 				key = _strip(src.resource_name)
+			key = str(substituts.get(key, key))
 			if key == "" or not mats.has(key):
 				if key != "" and not _missing.has(key):
 					_missing[key] = true
 					push_warning("Slot de matériau inconnu : '%s' sur %s" % [key, mi.name])
 				continue
 			mi.set_surface_override_material(i, mats[key])
+
+
+## Force UN matériau sur tout un sous-arbre, sans passer par les slots.
+##
+## Sert aux sols qui changent de nature d'une case à l'autre : le modèle de
+## dalle est le même partout, c'est la case qui décide si on marche sur du
+## carrelage, dans l'eau ou sur du verre.
+func forcer(root: Node, nom: String) -> void:
+	var m: Material = mats.get(nom)
+	if m == null:
+		return
+	for mi in _all_meshes(root):
+		if mi.mesh == null:
+			continue
+		for i in mi.mesh.get_surface_count():
+			mi.set_surface_override_material(i, m)
 
 
 func _strip(n: String) -> String:
