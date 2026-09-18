@@ -20,8 +20,12 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Tag à publier (doit déjà exister, ex. v1.1.0)"
+        description: "Tag à publier, ex. v1.2.0. Créé s'il n'existe pas encore."
         required: true
+      depuis:
+        description: "Branche ou commit à taguer (défaut : la branche par défaut)"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -42,9 +46,37 @@ jobs:
             echo "nom=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
           fi
 
+      # En déclenchement manuel on part d'une BRANCHE : le tag n'existe peut-être
+      # pas encore, et un checkout dessus échouerait avant même qu'on ait pu le
+      # créer. L'historique complet est nécessaire, sans quoi « git tag »
+      # n'aurait rien à désigner.
       - uses: actions/checkout@v4
         with:
-          ref: ${{ steps.tag.outputs.nom }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && (inputs.depuis != '' && inputs.depuis || github.ref_name) || steps.tag.outputs.nom }}
+          fetch-depth: 0
+
+      - name: Créer le tag s'il n'existe pas
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          TAG="${{ steps.tag.outputs.nom }}"
+          if git ls-remote --exit-code --tags origin "refs/tags/$TAG" >/dev/null 2>&1; then
+            # Le tag existe : c'est LUI qui fait foi, pas la branche. On publie
+            # ce qu'il désigne, sinon relancer sur un ancien tag construirait le
+            # code d'aujourd'hui sous une étiquette d'hier.
+            echo "Le tag $TAG existe deja : on publie ce qu'il designe."
+            git fetch --depth=1 origin "refs/tags/$TAG:refs/tags/$TAG"
+            git checkout -q --detach "$TAG"
+          else
+            echo "Creation de $TAG sur $(git rev-parse --short HEAD)"
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "RESPIRE $TAG"
+            # Pousse avec GITHUB_TOKEN : GitHub ne redeclenche pas de workflow
+            # sur un tag pousse par un workflow, donc pas de boucle avec le
+            # declencheur « push: tags ».
+            git push origin "refs/tags/$TAG"
+          fi
 
       - name: Installer Godot ${{ env.GODOT_VERSION }} et ses modèles d'export
         run: |

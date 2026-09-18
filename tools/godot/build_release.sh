@@ -39,6 +39,11 @@ if [[ "$WHAT" == "deploy" ]]; then
 	# la branche locale gh-pages peut déjà exister d'un déploiement précédent :
 	# on repart d'un arbre détaché et on la recrée à chaque fois.
 	git -C "$ROOT" worktree add --detach "$TMP" -q
+	# « worktree remove » ne supprime pas la branche créée dans l'arbre : sans ce
+	# nettoyage, le DEUXIÈME déploiement depuis un même clone échoue sur
+	# « a branch named 'gh-pages-tmp' already exists ». Le premier passe, donc la
+	# panne attend d'être en retard pour se manifester.
+	git -C "$ROOT" branch -D gh-pages-tmp 2>/dev/null || true
 	git -C "$TMP" checkout --orphan gh-pages-tmp -q
 	git -C "$TMP" rm -rq --cached . 2>/dev/null || true
 	find "$TMP" -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
@@ -51,5 +56,6 @@ if [[ "$WHAT" == "deploy" ]]; then
 	git -C "$TMP" commit -q -m "Version jouable dans le navigateur ($(date -u +%Y-%m-%d\ %H:%M) UTC)"
 	git -C "$TMP" push origin gh-pages-tmp:gh-pages --force
 	git -C "$ROOT" worktree remove --force "$TMP"
+	git -C "$ROOT" branch -D gh-pages-tmp 2>/dev/null || true
 	echo "    -> https://danx4529.github.io/HorrorGame/"
 fi
