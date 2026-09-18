@@ -381,6 +381,21 @@ func _apply_debug() -> void:
 			"prologue":
 				GameState.montrer_prologue = true
 				GameState.set_phase(GameState.Phase.PROLOGUE, true)
+			"cabine":
+				# Une cabine vide ne montrerait pas ce qu'elle sert à dire. On
+				# garnit EN MÉMOIRE seulement : passer par remonter_butin()
+				# écrirait sur le disque, et un drapeau de débogage n'a pas à
+				# toucher la sauvegarde de quelqu'un.
+				#
+				# L'archive est garnie du même nombre que le butin : la cabine
+				# affiche les deux, et un écran de contrôle qui montre « 3 mis
+				# à l'abri » au-dessus de « archive : 0 » donne à voir un état
+				# que le jeu ne peut pas produire.
+				GameState.etage_courant = Etages.premier()
+				for i in 3:
+					GameState.documents_lus[str(Lore.DOCUMENTS[i]["id"])] = true
+				GameState.butin_remonte = 3
+				GameState.set_phase(GameState.Phase.CABINE, true)
 			"journal":
 				# on marque quelques documents comme trouvés : un journal vide
 				# ne montrerait pas la mise en page réelle
@@ -431,7 +446,19 @@ func _apply_debug() -> void:
 		cam.projection = Camera3D.PROJECTION_ORTHOGONAL
 		cam.size = dbg_overview
 		cam.far = 200.0
-		player.global_position = Vector3(22.0, 46.0, 20.0)
+		# Le centre est DÉDUIT du plan. Il était cloué à (22, 20), c'est-à-dire
+		# au milieu de l'étage -1 : dès le deuxième étage la vue cadrait à côté,
+		# et rien ne l'aurait signalé — on aurait juste trouvé le plan mal
+		# centré sans savoir pourquoi.
+		var mn := Vector2(INF, INF)
+		var mx := Vector2(-INF, -INF)
+		for cle in level._cells:
+			var c: Vector2i = cle
+			var w: Vector3 = level.world_of(c.x, c.y)
+			mn = Vector2(minf(mn.x, w.x), minf(mn.y, w.z))
+			mx = Vector2(maxf(mx.x, w.x), maxf(mx.y, w.z))
+		var centre := (mn + mx) * 0.5
+		player.global_position = Vector3(centre.x, 46.0, centre.y)
 		player.set_look(0.0, -PI * 0.5)
 		player.can_move = false
 		player.torch_on = false
