@@ -19,6 +19,12 @@ cp "$ROOT/tools/correctif/faire_correctif.gd" "$EMBAL"
 
 cd "$ROOT"
 mkdir -p "$(dirname "$OUT")"
+# CHEMIN ABSOLU, impérativement. Godot tourne avec « --path game » : un chemin
+# relatif se résout depuis res://, où « build/ » n'existe pas et où l'on
+# n'écrit pas. En local on passait un chemin absolu et tout marchait ; le
+# workflow en passait un relatif, et le correctif n'était pas fabriqué —
+# l'étape se contentait d'un message d'erreur que personne ne lisait.
+OUT="$(cd "$(dirname "$OUT")" && pwd)/$(basename "$OUT")"
 
 # 1. les fichiers du jeu modifiés depuis la base
 # Comparaison avec l'ARBRE DE TRAVAIL et non avec HEAD : on veut pouvoir
