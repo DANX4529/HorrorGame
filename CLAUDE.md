@@ -46,6 +46,13 @@ navigables, plan ASCII des salles amputées) doit être **identique ligne pour
 ligne**. Toute fonctionnalité nouvelle se branche donc de façon qu'un étage
 qui ne la déclare pas ne fasse aucun tirage supplémentaire.
 
+Quand une correction la déplace **exprès** — un défaut de jeu qui ne peut pas
+se réparer autrement —, on ne se contente pas de constater « différent » : on
+lit CE QUI a bougé, champ par champ. C'est ainsi qu'on a vu `piles 5` devenir
+`piles 3` en même temps qu'un document changeait de case : l'écartement neuf
+entre objets supprimait les piles au lieu de les déplacer. Un verdict binaire
+l'aurait laissé passer.
+
 ## Tout système a son test dans la barrière
 
 Dix tests tournent avant chaque publication (`.github/workflows/release.yml`) :

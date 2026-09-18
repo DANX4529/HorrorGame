@@ -36,11 +36,16 @@ var vol_souffle := 1.00
 var vol_musique := 0.85
 var luminosite := 0.50         # 0..1, 0.5 = neutre
 var difficulte := int(Diff.PATIENT)
+## Plein écran SANS BORDURE (et non exclusif) : on garde l'alt-tab instantané
+## et le second écran utilisable, ce qui compte pour un jeu qu'on quitte des
+## yeux quand elle approche.
+var plein_ecran := false
 
 const DEFAUTS := {
 	"sensibilite": 0.40, "inverser_y": false, "vol_general": 0.80,
 	"vol_effets": 1.00, "vol_ambiance": 0.85, "vol_souffle": 1.00,
 	"vol_musique": 0.85, "luminosite": 0.50, "difficulte": 1,
+	"plein_ecran": false,
 }
 
 
@@ -83,7 +88,29 @@ func appliquer() -> void:
 	_bus("Ambiance", vol_ambiance)
 	_bus("Souffle", vol_souffle)
 	_bus("Musique", vol_musique)
+	appliquer_fenetre()
 	changed.emit()
+
+
+## Applique le mode d'affichage.
+##
+## Le serveur « headless » n'a pas de fenêtre : les tests et les captures
+## tourneraient sur une résolution qu'ils n'ont pas demandée, quand ils ne
+## planteraient pas. On ne touche à rien dans ce cas.
+func appliquer_fenetre() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var voulu := DisplayServer.WINDOW_MODE_FULLSCREEN if plein_ecran \
+			else DisplayServer.WINDOW_MODE_WINDOWED
+	if DisplayServer.window_get_mode() != voulu:
+		DisplayServer.window_set_mode(voulu)
+
+
+## Bascule et enregistre, pour la touche de raccourci comme pour le bouton.
+func basculer_plein_ecran() -> void:
+	plein_ecran = not plein_ecran
+	appliquer_fenetre()
+	sauver()
 
 
 func _bus(nom: String, v: float) -> void:

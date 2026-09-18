@@ -287,6 +287,10 @@ func _ecran_options() -> void:
 		func(v): Settings.inverser_y = v)
 	_espace(10)
 	_texte("IMAGE", 13, SOURD)
+	_reglage_bascule("Plein écran sans bordure", Settings.plein_ecran,
+		func(v):
+			Settings.plein_ecran = v
+			Settings.appliquer_fenetre())
 	_reglage_glissiere("Luminosité", Settings.luminosite,
 		func(v): Settings.luminosite = v)
 	_espace(10)

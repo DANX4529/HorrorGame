@@ -1012,9 +1012,15 @@ func _pick_spawns() -> void:
 			if _cells[cell] in lettres_ronde:
 				pool_jet.append(cell)
 		_shuffle(pool_jet)
-		for i in mini(n_jet, pool_jet.size()):
-			var spot := _free_spot(world_of(pool_jet[i].x, pool_jet[i].y))
-			if _reachable(spot):
+		# On DESCEND la liste jusqu'à en avoir posé assez, au lieu de ne
+		# regarder que les n premières cases : un emplacement refusé doit
+		# coûter une case de plus, pas un morceau de plâtre en moins. La liste
+		# est déjà mélangée, donc parcourir plus loin ne tire rien de neuf.
+		for cell_j in pool_jet:
+			if jetable_spawns.size() >= n_jet:
+				break
+			var spot := _free_spot(world_of(cell_j.x, cell_j.y))
+			if _reachable(spot) and _loin_de(spot, _deja_pose(), ECART_OBJETS):
 				jetable_spawns.append(spot)
 
 	var bat_rooms := lettres_piles
@@ -1025,10 +1031,32 @@ func _pick_spawns() -> void:
 				pool.append(cell)
 		if pool.is_empty():
 			continue
-		var cell: Vector2i = pool[_rng.randi() % pool.size()]
-		var spot := _free_spot(world_of(cell.x, cell.y))
-		if _reachable(spot):
-			battery_spawns.append(spot)
+		# Un seul tirage, qui donne le POINT DE DÉPART, puis on avance dans la
+		# liste. Refuser un emplacement ne doit pas supprimer la pile : sans
+		# ce parcours, ajouter l'écartement en a fait passer cinq à trois, et
+		# l'autonomie de la lampe s'en trouvait amputée sans que rien ne le
+		# dise. Le compte reste indépendant du nombre d'essais.
+		var depart := _rng.randi() % pool.size()
+		var pose_pile := false
+		for k in pool.size():
+			var cell: Vector2i = pool[(depart + k) % pool.size()]
+			var spot := _free_spot(world_of(cell.x, cell.y))
+			if _reachable(spot) and _loin_de(spot, _deja_pose(), ECART_OBJETS):
+				battery_spawns.append(spot)
+				pose_pile = true
+				break
+		if not pose_pile:
+			# Repli : n'importe quelle case atteignable. Chaque pile est
+			# assignée à UNE lettre de salle, et une petite salle déjà encombrée
+			# n'offre parfois aucun emplacement — le hall du -1 n'a que quatre
+			# cases. Une pile un peu hors de son décor vaut mieux qu'une lampe
+			# qui s'éteint faute d'avoir trouvé de quoi la recharger.
+			# _cells se parcourt dans l'ordre d'insertion : aucun tirage de plus.
+			for cell2 in _cells:
+				var spot2 := _free_spot(world_of(cell2.x, cell2.y))
+				if _reachable(spot2) and _loin_de(spot2, _deja_pose(), ECART_OBJETS):
+					battery_spawns.append(spot2)
+					break
 
 
 ## Répartit les documents du récit dans les salles qui leur donnent un sens.
@@ -1052,7 +1080,14 @@ func _placer_documents() -> void:
 		_shuffle(par_type[k])
 
 	var prises: Array[Vector2i] = []
+	# On part des objets DÉJÀ posés — les fusibles, semés juste avant. Sans
+	# eux dans la liste, l'écartement ne valait qu'entre documents, et un
+	# fusible pouvait tomber exactement sur une liasse : les deux corps de
+	# collision se recouvrent, un seul rayon d'interaction les atteint, et
+	# l'autre objet devient inaccessible. Quand c'est le fusible qui passe
+	# dessous, l'étage cesse d'être finissable.
 	var poses: Array[Vector3] = []
+	poses.append_array(fuse_spawns)
 	for d in Lore.DOCUMENTS:
 		# Chaque papier appartient à un étage. Sans ce filtre, le rapport
 		# d'incident du pavillon C se trouverait au service de veille, deux
@@ -1119,6 +1154,21 @@ func _placer_documents() -> void:
 
 
 const DOC_ECART_MIN := 1.6      ## mètres entre deux documents posés
+## Écart minimal entre deux objets ramassables quelconques. Plus petit que
+## celui des documents : il ne s'agit pas de lisibilité mais d'empêcher que
+## deux corps de collision se recouvrent au point qu'un seul soit atteignable.
+const ECART_OBJETS := 1.0
+
+
+## Tout ce qui est déjà posé au sol et qui se ramasse.
+func _deja_pose() -> Array[Vector3]:
+	var t: Array[Vector3] = []
+	t.append_array(fuse_spawns)
+	t.append_array(battery_spawns)
+	t.append_array(jetable_spawns)
+	for d in document_spawns:
+		t.append(d["pos"])
+	return t
 
 
 ## Cases envisageables pour un document, de la plus pertinente à la moins.

@@ -554,6 +554,15 @@ func _spawn_veilleuse() -> void:
 
 # --------------------------------------------------------------------------
 func _input(e: InputEvent) -> void:
+	# F11 : le raccourci que tout le monde essaie en premier. Traité ici et non
+	# par une action du projet, pour qu'il marche dans TOUTES les phases —
+	# titre, pause, lecture, mort — et pas seulement manette en main.
+	if e is InputEventKey and (e as InputEventKey).pressed \
+			and not (e as InputEventKey).echo \
+			and (e as InputEventKey).keycode == KEY_F11:
+		Settings.basculer_plein_ecran()
+		get_viewport().set_input_as_handled()
+		return
 	if GameState.phase == GameState.Phase.LECTURE \
 			and e is InputEventScreenTouch and (e as InputEventScreenTouch).pressed:
 		_tape_lecture = true
@@ -2427,10 +2436,55 @@ func _run_seed_check() -> void:
 	if level.document_spawns.size() != attendus:
 		pbs.append("%d documents places au lieu de %d"
 				% [level.document_spawns.size(), attendus])
-	if level.battery_spawns.is_empty():
-		pbs.append("aucune pile")
+	# Le COMPTE, pas seulement la presence
+	#
+	# « aucune pile » ne se declenche qu'au zero absolu. En ajoutant
+	# l'ecartement entre objets, les piles sont passees de 5 a 3 sans que rien
+	# ne bronche : un emplacement refuse supprimait la pile au lieu de la
+	# deplacer, et l'autonomie de la lampe fondait de 40 %. Un objet qui
+	# disparait en silence est exactement ce qu'un test doit attraper.
+	if level.battery_spawns.size() < 5:
+		pbs.append("%d piles au lieu de 5" % level.battery_spawns.size())
+	var n_jet_attendu := int(level.etage.get("jetables", 0))
+	if level.jetable_spawns.size() < n_jet_attendu:
+		pbs.append("%d morceaux de platre au lieu de %d"
+				% [level.jetable_spawns.size(), n_jet_attendu])
+	if level.fuse_spawns.size() < GameState.objectif_nombre:
+		pbs.append("%d pieces d'objectif au lieu de %d"
+				% [level.fuse_spawns.size(), GameState.objectif_nombre])
 	if get_tree().get_nodes_in_group("hiding").is_empty():
 		pbs.append("aucune cachette")
+
+	# Deux ramassables au meme endroit = un seul atteignable
+	#
+	# Les corps de collision se recouvrent et le rayon d'interaction ne trouve
+	# que le premier ; l'autre objet existe, se voit, et refuse d'etre pris.
+	# Quand c'est un fusible qui passe sous un document, l'etage cesse d'etre
+	# finissable — et rien ne le signale, ni a la construction ni en jouant.
+	# Les fusibles etaient semes AVANT les documents et l'ecartement ne valait
+	# qu'entre documents : le cas n'etait donc exclu nulle part.
+	var objets := []
+	for p3 in level.fuse_spawns:
+		objets.append(["fusible", p3])
+	for p3 in level.battery_spawns:
+		objets.append(["pile", p3])
+	for p3 in level.jetable_spawns:
+		objets.append(["platre", p3])
+	for e in level.document_spawns:
+		objets.append(["document %s" % e["id"], e["pos"]])
+	var colles := 0
+	for i in objets.size():
+		for j in range(i + 1, objets.size()):
+			var a3: Vector3 = objets[i][1]
+			var b3: Vector3 = objets[j][1]
+			var d3 := a3.distance_to(b3)
+			if d3 < 0.75:
+				colles += 1
+				if colles <= 3:
+					pbs.append("%s et %s a %.2f m — l'un des deux sera inatteignable"
+							% [objets[i][0], objets[j][0], d3])
+	if colles > 3:
+		pbs.append("... et %d autre(s) paire(s) collee(s)" % (colles - 3))
 
 	if pbs.is_empty():
 		print("SEEDCHECK %d OK  (fusibles %d, docs %d, piles %d, cachettes %d)"

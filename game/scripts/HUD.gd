@@ -393,9 +393,15 @@ func _on_document(id: String) -> void:
 	var col := page.get_child(0)
 	(col.get_node("Titre") as Label).text = str(d.get("titre", ""))
 	(col.get_node("Corps") as Label).text = str(d.get("texte", ""))
-	(col.get_node("Pied") as Label).text = "%s  ·  %d / %d documents  ·  " + Tactile.libelle("[E] refermer", "toucher pour refermer") % [
+	# Le « % » lie plus fort que le « + » : écrite en concaténation, la mise en
+	# forme s'appliquait au libellé de fermeture — qui n'a aucun marqueur — et
+	# non à la phrase. Résultat à chaque ouverture : une erreur d'exécution
+	# « not all arguments converted », et un pied de page affichant « %s · %d /
+	# %d documents » en toutes lettres. Une seule chaîne, un seul %.
+	(col.get_node("Pied") as Label).text = "%s  ·  %d / %d documents  ·  %s" % [
 			Lore.CHAPITRES.get(int(d.get("chap", 1)), ""),
-			GameState.documents_trouves(), Lore.total()]
+			GameState.documents_trouves(), Lore.total(),
+			Tactile.libelle("[E] refermer", "toucher pour refermer")]
 
 
 ## Place la jauge de souffle selon le mode d'entrée.
