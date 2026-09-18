@@ -16,6 +16,10 @@ config/icon="res://icon.svg"
 
 [autoload]
 
+; Correctif EN PREMIER : il superpose l'archive téléchargée avant que le
+; moindre autre script ne soit lu. Déplacé plus bas, il ne pourrait plus rien
+; corriger de ce qui le précède.
+Correctif="*res://scripts/Correctif.gd"
 Settings="*res://scripts/Settings.gd"
 Etages="*res://scripts/Etages.gd"
 GameState="*res://scripts/GameState.gd"
