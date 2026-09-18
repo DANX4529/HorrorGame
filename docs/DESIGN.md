@@ -215,20 +215,30 @@ tremblement de caméra, consommation du souffle ×(1 + heart).
 |---|---|---|
 | **−1 Le service de veille** | *(l'apprentissage : le souffle, elle)* | 4 fusibles |
 | **−2 Le pavillon C** | **Lancer un objet** pour l'attirer ailleurs | 3 disjoncteurs |
-| −3 Les bains *(à venir)* | Les surfaces : l'eau et le verre portent | 4 vannes |
+| **−3 Les bains** | **Les surfaces** : l'eau et le verre portent votre bruit | 4 volants de vanne |
 | −4 La cure d'obscurité *(à venir)* | Le noir total : la lampe meurt | traverser |
 | −5 La ronde *(à venir)* | Elle repasse où elle vous a entendu | la trouver |
 
 Le plan d'un étage est de la **donnée** (`game/scripts/Etages.gd`), sur le même
 contrat que le récit : agrandir le jeu, c'est ajouter une ligne à la table.
 
+Aux bains, `sols` attribue à chaque lettre de salle un facteur de bruit qui
+passe par le MÊME paramètre que le reste — eau 1,70, verre 2,10, lino 0,80.
+Ce n'est donc pas un échantillon sonore de plus : c'est réellement la distance
+à laquelle elle vous entend qui change, et le chemin le plus court cesse
+d'être le plus sûr.
+
 ### Ce qui reste ouvert pour une suite
 
-- Deux étages sur les cinq prévus (−1 le service de veille, −2 le pavillon C).
-- Le pavillon C n'a pas encore son chapitre : on y trouve les documents restés
-  du niveau −1. Les documents ne sont pas encore rattachés à un étage.
-- Une seule entité et un seul scénario de fin.
+- Trois étages sur les cinq prévus. Restent le −4 (le noir total, où la lampe
+  meurt) et le −5 (elle repasse où elle vous a entendu).
+- Les trois fins dépendent du −5 : le jeu n'a donc pour l'instant **pas de
+  fin**, la descente s'arrête aux bains.
+- Une seule entité.
 - Les casiers sont la seule forme de cachette (pas de dessous-de-lit).
+- Trois documents sur quatorze atterrissent en couloir au niveau −1 quand leurs
+  salles de prédilection sont prises. Corriger le placeur déplacerait un étage
+  déjà publié : c'est un arbitrage, pas un oubli.
 
 ---
 
