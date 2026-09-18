@@ -172,6 +172,13 @@ func _build_world() -> void:
 		DirAccess.remove_absolute(GameState.FICHIER_PROGRESSION)
 		GameState.oublier_tout()
 		GameState.souffle_appris = false
+		# … et l'étage aussi. oublier_tout() ne vide que les documents, tandis
+		# qu'etage_courant a DÉJÀ été lu du disque au démarrage de l'autoload :
+		# effacer le fichier ensuite ne le remet pas à zéro. Sans cette ligne,
+		# --loretest examine l'étage que le test précédent a laissé derrière
+		# lui — d'où un verdict qui changeait d'une exécution à l'autre, pour
+		# une raison qui n'était écrite nulle part.
+		GameState.etage_courant = Etages.premier()
 	# l'étage demandé doit être choisi AVANT reset_run(), qui y lit l'objectif
 	if dbg_etage != 0:
 		GameState.etage_courant = dbg_etage
@@ -1164,6 +1171,48 @@ func _run_lore_test() -> void:
 		print("LORE  ! trop de documents echouent hors de leur salle")
 		ok = false
 
+	# --- 3 bis. les AUTRES etages placent-ils aussi leurs documents ? ---
+	#
+	# Les points 1 a 3 n'examinent que l'etage bati, soit la moitie du recit
+	# depuis que la campagne en compte trois. Un document du pavillon C ou des
+	# bains qui ne se poserait jamais serait invisible ici, et invisible en
+	# jouant : c'est exactement la panne silencieuse que ce test existe pour
+	# attraper. On batit donc chaque etage et on regarde.
+	for e in Etages.ETAGES:
+		var niv2 := int(e["niveau"])
+		if niv2 == level.etage_niveau():
+			continue            # deja examine, en detail, ci-dessus
+		var essai := preload("res://scripts/LevelBuilder.gd").new()
+		add_child(essai)
+		essai.build(7331, e)
+		var attendus: Array = Lore.du_niveau(niv2)
+		var poses := {}
+		for d in essai.document_spawns:
+			poses[d["id"]] = d["pos"]
+		var absents := []
+		var dans_mur := []
+		var pertinents := 0
+		for d in attendus:
+			var id2: String = str(d["id"])
+			if not poses.has(id2):
+				absents.append(id2)
+				continue
+			if not essai._reachable(poses[id2]):
+				dans_mur.append(id2)
+			var g2: Vector2i = essai.world_to_cell(poses[id2])
+			var c2: String = essai._cells.get(g2, "")
+			if c2 in (d.get("lieu", []) as Array):
+				pertinents += 1
+		print("LORE  etage %-3d %d/%d documents poses, %d dans une salle pertinente"
+				% [niv2, poses.size(), attendus.size(), pertinents])
+		if not absents.is_empty():
+			print("LORE  ! etage %d : jamais places : %s" % [niv2, str(absents)])
+			ok = false
+		if not dans_mur.is_empty():
+			print("LORE  ! etage %d : places dans un mur : %s" % [niv2, str(dans_mur)])
+			ok = false
+		essai.queue_free()
+
 	# --- 4. objets lisibles réellement présents dans la scène ---
 	var noeuds := get_node("Documents").get_child_count()
 	print("LORE  objets lisibles instancies : %d" % noeuds)
@@ -2071,6 +2120,34 @@ func _run_etages_test() -> void:
 				print("ETAGES  ECHEC : le chapitre %d a des documents au niveau %d sans y etre annonce"
 						% [int(c), niv])
 				ok = false
+
+	# 9. chaque etage se construit VRAIMENT, et chaque salle y est habillee
+	#
+	# Les points precedents lisent la table ; celui-ci batit. Il attrape la
+	# panne qui a coute deux commits : le bras « _ » de _dress_rooms() place
+	# au-dessus de "C" avalait tous les couloirs — 45 % de l'etage -1,
+	# cachettes comprises — sans rien lever, parce qu'une piece vide se
+	# construit tres bien. Declarer la lettre dans LETTRES_HABILLEES ne prouve
+	# rien : il faut verifier qu'elle ATTEINT sa fonction.
+	for e in Etages.ETAGES:
+		var niv := int(e["niveau"])
+		var essai := preload("res://scripts/LevelBuilder.gd").new()
+		add_child(essai)
+		essai.build(4242, e)
+		var orphelines: Array = essai.lettres_sans_habillage.keys()
+		var props := essai.get_node_or_null("Props")
+		var n_props: int = props.get_child_count() if props else 0
+		print("ETAGES  %-3d bati : %d props, %d cachette(s), salles sans habillage %s"
+				% [niv, n_props, essai.hiding_spots.size(),
+				   str(orphelines) if not orphelines.is_empty() else "aucune"])
+		if not orphelines.is_empty():
+			print("ETAGES  ECHEC : au niveau %d les salles %s n'atteignent aucune fonction d'habillage — ordre des bras de _dress_rooms() ?"
+					% [niv, str(orphelines)])
+			ok = false
+		if essai.hiding_spots.is_empty():
+			print("ETAGES  ECHEC : le niveau %d n'a aucune cachette" % niv)
+			ok = false
+		essai.queue_free()
 
 	print("ETAGES RESULTAT : %s" % ("OK" if ok else "ECHEC"))
 	get_tree().quit(0 if ok else 1)

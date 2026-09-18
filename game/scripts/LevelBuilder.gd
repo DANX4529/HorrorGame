@@ -57,6 +57,12 @@ var fusebox: Node3D = null
 var exit_gate: Node3D = null
 var _rng := RandomNumberGenerator.new()
 
+## Lettres tombées dans le bras « _ » de _dress_rooms(), lues par --etagetest.
+##
+## Une salle non habillée ne plante pas : elle est simplement vide. Ce registre
+## est le seul moyen de le voir autrement qu'en jouant.
+var lettres_sans_habillage: Dictionary = {}
+
 ## Lettres de salle que ce fichier sait habiller.
 ##
 ## Déclarée ici et lue par --etagetest : la liste des lettres connues vivait
@@ -442,11 +448,18 @@ func _dress_rooms() -> void:
 			"V":      _dress_vestiaires(props, p, cell)
 			"N":      _dress_nourrice(props, p, cell)
 			"L":      _dress_lingerie(props, p, cell)
+			"C":      _dress_couloir(props, p, cell)
 			_:
 				# Une lettre sans habillage donne une pièce vide, ce qui ne
 				# lève rien : on le dit.
+				#
+				# CE BRAS RESTE LE DERNIER. « _ » attrape TOUT et les bras sont
+				# essayés dans l'ordre : placé plus haut, il avalait "C" et
+				# aucun couloir n'était habillé — 45 % de l'étage -1, 56 % du
+				# -2, cachettes comprises. Le défaut a vécu deux commits sans
+				# rien lever, parce qu'une pièce vide ne plante pas.
+				lettres_sans_habillage[c] = true
 				push_warning("Aucun habillage pour la salle '%s'" % c)
-			"C":      _dress_couloir(props, p, cell)
 		_mobilier_etage(props, p, cell, c)
 
 
