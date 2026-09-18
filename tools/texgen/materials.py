@@ -670,10 +670,64 @@ RECIPES = {
 
 
 # ==========================================================================
+#  Variantes
+#
+#  Une texture posée sur une grande surface se répète en damier visible dès
+#  qu'on la pose sur trente mètres de couloir : on reconnaît la même tache au
+#  même endroit de chaque case. Plusieurs variantes de la MÊME recette, tirées
+#  sur d'autres graines, cassent ce damier.
+#
+#  Elles ne diffèrent que par l'ALBÉDO. La carte de normales et l'ORM sont
+#  partagées : la structure — grille de carreaux, grain du béton — est la même
+#  d'une variante à l'autre, et c'est l'albédo qui porte les taches. Des
+#  variantes complètes pèseraient trois fois plus (+38 Mo contre +13) pour un
+#  gain qu'on ne voit pas.
+# ==========================================================================
+VARIANTES = {
+    "wall_tile": 4,
+    "wall_plaster": 4,
+    "ceiling_plaster": 4,
+    "floor_lino": 4,
+    "floor_concrete": 4,
+    "bath_tile": 4,
+    "bath_floor": 4,
+}
+
+
+def n_variantes(nom):
+    return VARIANTES.get(nom, 1)
+
+
+def graine_variante(nom, k):
+    """Graine de la k-ième variante. k=0 est la texture de base."""
+    return k * 977
+
+
+# ==========================================================================
 #  Écriture disque
 # ==========================================================================
 def _u8(a):
     return (np.clip(a, 0, 1) * 255.0 + 0.5).astype(np.uint8)
+
+
+def write_variant_albedo(name, k, data, outdir, cible=None):
+    """N'écrit QUE l'albédo d'une variante : le reste est partagé.
+
+    La variante est RECALÉE sur la luminance moyenne de la texture de base.
+    Sans ça, deux tirages de plâtre s'écartaient de 40 niveaux sur 255 : les
+    pans de mur voisins avaient l'air repeints de couleurs différentes, et on
+    lisait la grille de quatre mètres encore mieux qu'avant. Une variante doit
+    varier par le DÉTAIL — où sont les taches — jamais par le ton d'ensemble.
+    """
+    import os
+    os.makedirs(outdir, exist_ok=True)
+    alb = data["albedo"]
+    if cible is not None:
+        moy = float(alb.mean())
+        if moy > 1e-4:
+            alb = np.clip(alb * (cible / moy), 0.0, 1.0)
+    Image.fromarray(_u8(alb)).save(
+        f"{outdir}/{name}_v{k}_albedo.png", optimize=True)
 
 
 def write_material(name, data, outdir):

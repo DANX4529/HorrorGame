@@ -47,7 +47,15 @@ def main():
         data = M.RECIPES[name](res=res)
         normal, orm = M.write_material(name, data, OUT)
         preview[name] = (M._u8(data["albedo"]), M._u8(normal), M._u8(orm))
-        print(f"  {name:<18} {res}x{res}  {time.time()-t:5.1f}s")
+        # Variantes : même recette, autre graine, albédo seul (voir materials.py)
+        nv = M.n_variantes(name)
+        for k in range(1, nv):
+            import inspect
+            base = inspect.signature(M.RECIPES[name]).parameters["seed"].default
+            dv = M.RECIPES[name](res=res, seed=base + M.graine_variante(name, k))
+            M.write_variant_albedo(name, k, dv, OUT, cible=float(data["albedo"].mean()))
+        suff = f"  +{nv - 1} variante(s)" if nv > 1 else ""
+        print(f"  {name:<18} {res}x{res}  {time.time()-t:5.1f}s{suff}")
     print(f"total {time.time()-t0:.1f}s -> {OUT}")
     if a.sheet:
         print("sheet:", contact_sheet(preview, a.sheet))

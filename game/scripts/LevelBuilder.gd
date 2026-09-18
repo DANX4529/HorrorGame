@@ -300,7 +300,11 @@ func _build_shell() -> void:
 		var c: String = _cells[cell]
 		var beton := _is_beton(c)
 		var p := world_of(cell.x, cell.y)
-		var sol_inst := _place(shell, "floor_concrete" if beton else "floor_lino", p, 0.0, true)
+		# Une variante par case, tirée des coordonnées : deux cases voisines ne
+		# montrent pas la même tache au même endroit.
+		var vr := MaterialLib.variante_de(cell.x, cell.y, 4)
+		var sol_inst := _place(shell, "floor_concrete" if beton else "floor_lino",
+				p, 0.0, true, vr)
 		# Le sol de la case peut imposer son propre matériau : une salle inondée
 		# doit SE VOIR inondée, pas seulement s'entendre. Sans ça la texture
 		# d'eau et celle de verre brisé existent sur le disque sans jamais
@@ -309,7 +313,8 @@ func _build_shell() -> void:
 			var mat_sol: String = str((sols[c] as Dictionary).get("materiau", ""))
 			if mat_sol != "":
 				MaterialLib.forcer(sol_inst, mat_sol)
-		var ceil_inst := _place(shell, "ceiling_concrete" if beton else "ceiling", p, 0.0, false)
+		var ceil_inst := _place(shell, "ceiling_concrete" if beton else "ceiling",
+				p, 0.0, false, MaterialLib.variante_de(cell.x + 31, cell.y + 17, 4))
 		if ceil_inst:
 			ceil_inst.add_to_group("ceiling")
 		_add_box(shell, p + Vector3(0, -0.05, 0), Vector3(CELL, 0.1, CELL))
@@ -354,7 +359,11 @@ func _edge(parent: Node3D, key: String, pos: Vector3, rot: float,
 		scene_name = "wall_window"          # ouverture sur la nuit, façade uniquement
 	else:
 		scene_name = "wall_concrete" if beton else "wall_plain"
-	_place(parent, scene_name, pos, rot, false)
+	# Variante tirée de la POSITION du pan de mur, arrondie au demi-mètre :
+	# deux murs voisins n'affichent pas la même coulure au même endroit, et le
+	# même mur garde la sienne d'une reconstruction à l'autre.
+	_place(parent, scene_name, pos, rot, false,
+			MaterialLib.variante_de(roundi(pos.x * 2.0), roundi(pos.z * 2.0), 4))
 	_wall_collision(parent, pos, rot, is_door)
 	if is_door:
 		_pending_doors.append({"pos": pos, "rot": rot, "beton": beton})
@@ -379,7 +388,7 @@ func _wall_collision(parent: Node3D, pos: Vector3, rot: float, is_door: bool) ->
 
 
 func _place(parent: Node3D, scene_name: String, pos: Vector3, rot: float,
-		is_floor := false) -> Node3D:
+		is_floor := false, variante := -1) -> Node3D:
 	var ps: PackedScene = _env_scenes.get(scene_name)
 	if ps == null:
 		return null
@@ -387,7 +396,7 @@ func _place(parent: Node3D, scene_name: String, pos: Vector3, rot: float,
 	inst.position = pos
 	inst.rotation.y = rot
 	parent.add_child(inst)
-	MaterialLib.apply(inst)
+	MaterialLib.apply(inst, variante)
 	return inst
 
 

@@ -19,6 +19,13 @@ const NAMES := [
 var mats: Dictionary = {}
 var _missing: Dictionary = {}
 
+## Variantes par matériau : nom -> [base, v1, v2, ...].
+##
+## Une texture posée sur trente mètres de couloir se répète en damier visible ;
+## plusieurs tirages de la même recette cassent ce damier. Elles partagent
+## normale et ORM, seules les taches changent.
+var variantes: Dictionary = {}
+
 ## Substitutions en vigueur : nom d'origine -> nom à employer.
 ##
 ## Les modèles d'architecture sont les mêmes à tous les étages ; ce sont leurs
@@ -37,8 +44,27 @@ func _ready() -> void:
 		var m := load(DIR + n + ".tres")
 		if m:
 			mats[n] = m
+			var liste: Array = [m]
+			# On s'arrête à la première manquante : les variantes sont
+			# numérotées sans trou par gen_materials.
+			var k := 1
+			while ResourceLoader.exists(DIR + "%s_v%d.tres" % [n, k]):
+				liste.append(load(DIR + "%s_v%d.tres" % [n, k]))
+				k += 1
+			if liste.size() > 1:
+				variantes[n] = liste
 		else:
 			push_warning("Matériau introuvable : " + n)
+
+
+## Numéro de variante stable pour une case donnée.
+##
+## Déterministe et SANS _rng : un tirage aléatoire de plus décalerait toute la
+## suite des tirages du niveau et ferait bouger un étage déjà publié.
+func variante_de(x: int, y: int, n: int) -> int:
+	if n <= 1:
+		return 0
+	return absi((x * 73856093) ^ (y * 19349663)) % n
 
 
 func get_mat(n: String) -> Material:
@@ -46,7 +72,7 @@ func get_mat(n: String) -> Material:
 
 
 ## Applique les matériaux à tout un sous-arbre fraîchement instancié.
-func apply(root: Node) -> void:
+func apply(root: Node, variante := -1) -> void:
 	for mi in _all_meshes(root):
 		var mesh := mi.mesh
 		if mesh == null:
@@ -62,7 +88,11 @@ func apply(root: Node) -> void:
 					_missing[key] = true
 					push_warning("Slot de matériau inconnu : '%s' sur %s" % [key, mi.name])
 				continue
-			mi.set_surface_override_material(i, mats[key])
+			var choisi: Material = mats[key]
+			if variante >= 0 and variantes.has(key):
+				var l: Array = variantes[key]
+				choisi = l[variante % l.size()]
+			mi.set_surface_override_material(i, choisi)
 
 
 ## Force UN matériau sur tout un sous-arbre, sans passer par les slots.

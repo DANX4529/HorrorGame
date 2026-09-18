@@ -5,6 +5,24 @@ Tout est produit par les scripts du dépôt : aucune banque d'assets.
 
 ---
 
+## Textures : TOUJOURS 3 à 4 variantes
+
+**Règle. Toute texture posée sur une grande surface — sol, mur, plafond —
+doit exister en 3 ou 4 variantes.** Une seule, si tuilable soit-elle, se
+répète en damier visible dès qu'on la pose sur trente mètres de couloir :
+on reconnaît la même tache au même endroit de chaque case, et c'est laid.
+
+Une variante = la même recette, une autre graine. Elles partagent la carte
+de normales et l'ORM (la structure — grille de carreaux, grain — est la
+même d'une variante à l'autre) et ne diffèrent que par l'albédo, qui est ce
+qui porte les taches. C'est ce qui coûte le moins cher : des variantes
+complètes pèsent trois fois plus pour un gain qu'on ne voit pas.
+
+Déclarer le nombre de variantes dans `VARIANTES` (`tools/texgen/materials.py`).
+Le choix se fait **par case**, par un hachage des coordonnées — jamais avec
+`_rng`, qui décalerait tous les tirages suivants et ferait bouger un étage
+déjà publié.
+
 ## Le raccord se juge à l'œil, pas au nombre
 
 `tools/verify/seams.py` tuile chaque texture 2×2 sur une planche. Une couture

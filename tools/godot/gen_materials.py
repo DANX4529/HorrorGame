@@ -37,11 +37,17 @@ MATS = {
 }
 
 
-def write(name, o):
+def write(name, o, variante=0):
+    """Écrit un .tres. variante>0 pointe sur l'albédo de la variante et
+    RÉUTILISE la normale et l'ORM de la texture de base : la structure est la
+    même, seules les taches changent."""
+    base = name
+    alb = name if variante == 0 else f"{name}_v{variante}"
     lines = ['[gd_resource type="ORMMaterial3D" format=3]', ""]
     for i, suffix in enumerate(("albedo", "normal", "orm")):
-        lines.append(f'[ext_resource type="Texture2D" path="{TEX}/{name}_{suffix}.png" id="t{i}"]')
-    lines += ["", "[resource]", f'resource_name = "{name}"',
+        src = alb if suffix == "albedo" else base
+        lines.append(f'[ext_resource type="Texture2D" path="{TEX}/{src}_{suffix}.png" id="t{i}"]')
+    lines += ["", "[resource]", f'resource_name = "{alb}"',
               'albedo_texture = ExtResource("t0")',
               "normal_enabled = true",
               'normal_texture = ExtResource("t1")',
@@ -56,19 +62,38 @@ def write(name, o):
     if o.get("spec"):
         lines.append(o["spec"])
     os.makedirs(OUT, exist_ok=True)
-    path = os.path.join(OUT, name + ".tres")
+    path = os.path.join(OUT, (name if variante == 0 else f"{name}_v{variante}") + ".tres")
     with open(path, "w") as f:
         f.write("\n".join(lines) + "\n")
     return path
 
 
 if __name__ == "__main__":
-    missing = []
+    import sys
+    sys.path.insert(0, os.path.join(ROOT, "tools", "texgen"))
+    try:
+        import materials as MX
+        VAR = MX.VARIANTES
+    except Exception:
+        VAR = {}
+
+    TEXDIR = os.path.join(ROOT, "game", "assets", "textures")
+    missing, ecrits = [], 0
     for n, o in MATS.items():
         for s in ("albedo", "normal", "orm"):
-            fp = os.path.join(ROOT, "game", "assets", "textures", f"{n}_{s}.png")
+            fp = os.path.join(TEXDIR, f"{n}_{s}.png")
             if not os.path.exists(fp):
                 missing.append(os.path.basename(fp))
         write(n, o)
-    print(f"  {len(MATS)} materiaux ecrits")
+        ecrits += 1
+        # Une variante n'est écrite que si son albédo existe vraiment : sinon
+        # Godot chargerait une ressource pointant sur un fichier absent, et le
+        # niveau se bâtirait avec un matériau vide sans rien signaler.
+        for k in range(1, VAR.get(n, 1)):
+            if os.path.exists(os.path.join(TEXDIR, f"{n}_v{k}_albedo.png")):
+                write(n, o, k)
+                ecrits += 1
+            else:
+                missing.append(f"{n}_v{k}_albedo.png")
+    print(f"  {ecrits} materiaux ecrits ({len(MATS)} de base)")
     print("  TEXTURES MANQUANTES:", missing if missing else "aucune")
