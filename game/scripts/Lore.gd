@@ -10,6 +10,8 @@ extends Node
 ##   id      clé stable, sert à la sauvegarde — NE JAMAIS la renommer, sinon
 ##           les joueurs perdent ce qu'ils ont déjà trouvé
 ##   chap    numéro de chapitre (voir CHAPITRES)
+##   niveau  étage où le document se trouve. Un papier du pavillon C n'a rien
+##           à faire au service de veille : c'est ce champ qui l'y retient.
 ##   titre   ce qui s'affiche en tête du document et dans le journal
 ##   genre   "note", "dossier", "registre", "lettre", "carnet", "mur"
 ##   lieu    lettres des salles où le document a un sens (voir LevelBuilder.MAP).
@@ -118,6 +120,7 @@ const CHAPITRES := {
 	1: "Le service de veille",
 	2: "La cure d'obscurité",
 	3: "Marthe",
+	4: "Le pavillon C",
 }
 
 const DOCUMENTS := [
@@ -126,7 +129,7 @@ const DOCUMENTS := [
 #  Ce que ce lieu était, et la règle qui y régnait.
 # =========================================================================
 {
-	"id": "plaque_service", "chap": 1, "genre": "mur", "lieu": ["H"],
+	"id": "plaque_service", "chap": 1, "niveau": -1, "genre": "mur", "lieu": ["H"],
 	"titre": "Plaque de service",
 	"texte": """SANATORIUM DU MONT-CENDRE
 NIVEAU −1 — SERVICE DE VEILLE
@@ -136,7 +139,7 @@ Le silence est un soin.
 Prière de ne pas réveiller les pensionnaires.""",
 },
 {
-	"id": "note_eclairage", "chap": 1, "genre": "note", "lieu": ["A", "C"],
+	"id": "note_eclairage", "chap": 1, "niveau": -1, "genre": "note", "lieu": ["A", "C"],
 	"titre": "Note de service n° 14",
 	"texte": """Il est rappelé au personnel de nuit que l'éclairage du
 niveau −1 demeure interdit en dehors des rondes.
@@ -152,7 +155,7 @@ les nuits.
 Le directeur""",
 },
 {
-	"id": "registre_admissions", "chap": 1, "genre": "registre", "lieu": ["A", "R"],
+	"id": "registre_admissions", "chap": 1, "niveau": -1, "genre": "registre", "lieu": ["A", "R"],
 	"titre": "Registre d'admission — page arrachée",
 	"texte": """ADMISSIONS — SERVICE DE VEILLE — 1959
 
@@ -169,7 +172,7 @@ La colonne SORTIES est vide sur toute la page.
 Elle l'est aussi sur les suivantes.""",
 },
 {
-	"id": "fiche_veilleuse", "chap": 1, "genre": "dossier", "lieu": ["S", "A"],
+	"id": "fiche_veilleuse", "chap": 1, "niveau": -1, "genre": "dossier", "lieu": ["S", "A"],
 	"titre": "Fiche de poste — veilleuse de nuit",
 	"texte": """La veilleuse porte l'unique lampe du service.
 
@@ -189,7 +192,7 @@ Le bruit réveille ceux qui étaient calmes.""",
 #  Ce qu'on a fait ici, et la logique qui l'a permis.
 # =========================================================================
 {
-	"id": "lacaze_theorie", "chap": 2, "genre": "note", "lieu": ["S"],
+	"id": "lacaze_theorie", "chap": 2, "niveau": -1, "genre": "note", "lieu": ["S"],
 	"titre": "Communication du Dr Lacaze",
 	"texte": """La terreur n'entre pas par l'oreille.
 Elle entre par l'œil.
@@ -207,7 +210,7 @@ Il faut donc que l'œil cesse de chercher.
 H. Lacaze""",
 },
 {
-	"id": "protocole_cure", "chap": 2, "genre": "dossier", "lieu": ["S"],
+	"id": "protocole_cure", "chap": 2, "niveau": -1, "genre": "dossier", "lieu": ["S"],
 	"titre": "Protocole — cure d'obscurité",
 	"texte": """PHASE I — Obscurité continue, quatorze jours.
   Aucune lampe. Repas servis à l'aveugle.
@@ -225,7 +228,7 @@ du pensionnaire est requis, ou à défaut celui de la
 famille, ou à défaut celui de l'administration.""",
 },
 {
-	"id": "observation_17", "chap": 2, "genre": "dossier", "lieu": ["S", "D", "E"],
+	"id": "observation_17", "chap": 2, "niveau": -1, "genre": "dossier", "lieu": ["S", "D", "E"],
 	"titre": "Observation clinique — pensionnaire n° 17",
 	"texte": """J+3 après phase III.
 
@@ -242,7 +245,7 @@ si quelqu'un d'autre est réveillé.
 Résultat consigné : succès.""",
 },
 {
-	"id": "lettre_pensionnaire", "chap": 2, "genre": "lettre", "lieu": ["D", "E"],
+	"id": "lettre_pensionnaire", "chap": 2, "niveau": -1, "genre": "lettre", "lieu": ["D", "E"],
 	"titre": "Lettre non postée",
 	"texte": """Ma chère sœur,
 
@@ -269,7 +272,7 @@ Julien""",
 #  Qui elle était, et ce qu'elle a choisi.
 # =========================================================================
 {
-	"id": "carnet_marthe_1", "chap": 3, "genre": "carnet", "lieu": ["C", "R"],
+	"id": "carnet_marthe_1", "chap": 3, "niveau": -1, "genre": "carnet", "lieu": ["C", "R"],
 	"titre": "Carnet de Marthe — I",
 	"texte": """Ronde de 23 h 40.
 
@@ -287,7 +290,7 @@ seuls.
 C'est la seule chose qu'on leur laisse décider.""",
 },
 {
-	"id": "carnet_marthe_2", "chap": 3, "genre": "carnet", "lieu": ["C", "R", "W"],
+	"id": "carnet_marthe_2", "chap": 3, "niveau": -1, "genre": "carnet", "lieu": ["C", "R", "W"],
 	"titre": "Carnet de Marthe — II",
 	"texte": """Ronde de 2 h.
 
@@ -304,7 +307,7 @@ Je veux bien le croire. Mais je vois bien qu'ils
 attendent mes pas, et que ce n'est pas de la peur.""",
 },
 {
-	"id": "consentement_marthe", "chap": 3, "genre": "dossier", "lieu": ["A", "S"],
+	"id": "consentement_marthe", "chap": 3, "niveau": -1, "genre": "dossier", "lieu": ["A", "S"],
 	"titre": "Formulaire de consentement",
 	"texte": """CURE D'OBSCURITÉ — PHASE III
 CONSENTEMENT DU SUJET
@@ -326,7 +329,7 @@ Observation du praticien :
 Signature du sujet : M. Delaunay""",
 },
 {
-	"id": "carnet_marthe_3", "chap": 3, "genre": "carnet", "lieu": ["D", "E", "W", "C"],
+	"id": "carnet_marthe_3", "chap": 3, "niveau": -1, "genre": "carnet", "lieu": ["D", "E", "W", "C"],
 	"titre": "Carnet de Marthe — III",
 	"texte": """Les lignes se chevauchent, écrites sans regarder.
 
@@ -346,7 +349,7 @@ ils respirent moins fort quand je passe. ils
 me reconnaissent""",
 },
 {
-	"id": "derniere_ronde", "chap": 3, "genre": "note", "lieu": ["T", "M"],
+	"id": "derniere_ronde", "chap": 3, "niveau": -1, "genre": "note", "lieu": ["T", "M"],
 	"titre": "Ordre d'évacuation",
 	"texte": """MONT-CENDRE — 9 NOVEMBRE 1961
 
@@ -365,7 +368,7 @@ Elle a déclaré qu'elle terminait sa ronde.
 Le monte-charge a été condamné à 11 h 40.""",
 },
 {
-	"id": "inscription_dortoir", "chap": 3, "genre": "mur", "lieu": ["D", "E", "W", "S"],
+	"id": "inscription_dortoir", "chap": 3, "niveau": -1, "genre": "mur", "lieu": ["D", "E", "W", "S"],
 	"titre": "Gravé dans la peinture",
 	"texte": """Creusé à l'ongle, très profond, repassé
 un grand nombre de fois :
@@ -375,6 +378,149 @@ un grand nombre de fois :
 
       E L L E   C R O I T   Q U E
          T U   N E   D O R S   P A S""",
+},
+# =========================================================================
+#  CHAPITRE IV — LE PAVILLON C   (niveau −2)
+#  Ce qui s'est passé en bas, et qui a ouvert les portes.
+# =========================================================================
+{
+	"id": "pavillon_consigne", "chap": 4, "niveau": -2, "genre": "mur",
+	"lieu": ["P", "C"],
+	"titre": "Consigne permanente",
+	"texte": """PAVILLON C — NIVEAU −2
+
+Le silence est observé sans interruption.
+
+Il n'est pas demandé aux pensionnaires de dormir.
+Il leur est demandé de ne pas faire de bruit.
+
+Le personnel de nuit circule sans annoncer son passage.
+
+Toute parole, tout appel, tout coup porté à une porte
+sera consigné au dossier du pensionnaire.""",
+},
+{
+	"id": "pavillon_affectation", "chap": 4, "niveau": -2, "genre": "registre",
+	"lieu": ["G", "A"],
+	"titre": "Tableau d'affectation — novembre",
+	"texte": """PAVILLON C — SERVICE DE NUIT
+
+  21 h – 5 h     DELAUNAY, M.        (seule)
+
+  Effectif du pavillon        31
+  dont transférables          19
+  dont NON TRANSFÉRABLES      12
+
+Rappel : les non-transférables ne quittent le pavillon
+sous aucun prétexte, y compris en cas d'alerte.
+
+Une seule veilleuse par nuit. Le docteur estime qu'un
+effectif plus nombreux produirait trop de bruit.""",
+},
+{
+	"id": "liste_non_transferables", "chap": 4, "niveau": -2, "genre": "dossier",
+	"lieu": ["A", "R"],
+	"titre": "Liste des non-transférables",
+	"texte": """PHASE III ACHEVÉE — NE PEUVENT ÊTRE PRÉSENTÉS
+À L'EXTÉRIEUR
+
+  ch. 2   BRUNET, Aimée           14 ans
+  ch. 4   COLLIN, Marcel          9 ans
+  ch. 5   DELORME, Jeanne         11 ans
+  ch. 7   FAURE, Henri            8 ans
+  ch. 9   GARNIER, Suzanne        12 ans
+  ...
+
+  ch. 14  DELAUNAY, Marthe        29 ans
+                                  (à titre de
+                                  démonstration)
+
+Motif commun : état des paupières.""",
+},
+{
+	"id": "incident_rapport", "chap": 4, "niveau": -2, "genre": "dossier",
+	"lieu": ["G", "A"],
+	"titre": "Rapport d'incident — nuit du 3 au 4",
+	"texte": """À 3 h 15, l'agent de relève a trouvé le pavillon C
+vide de ses chambres et ses douze pensionnaires
+non transférables réunis dans la salle commune.
+
+Ils se tenaient debout, en cercle, sans lumière.
+
+Ils ne parlaient pas. Interrogés, ils n'ont pas
+répondu. Aucun n'a cherché à fuir. Aucun n'a été
+trouvé blessé.
+
+Aucune serrure n'a été forcée. Les douze portes
+avaient été ouvertes de l'extérieur, dans l'ordre
+de la ronde.
+
+L'agent déclare qu'en entrant il a entendu, avant
+de faire de la lumière, qu'ils respiraient tous
+ensemble.""",
+},
+{
+	"id": "carnet_marthe_4", "chap": 4, "niveau": -2, "genre": "carnet",
+	"lieu": ["C", "D", "E", "R"],
+	"titre": "Carnet de Marthe — IV",
+	"texte": """Nuit du 3.
+
+Je les ai fait sortir.
+
+Ça fait onze semaines qu'ils sont seuls dans le noir
+à quatre mètres les uns des autres, et qu'ils
+s'écoutent respirer à travers les murs sans pouvoir
+se répondre. Ils savaient déjà qui était où. Ils
+n'avaient besoin de personne pour se trouver.
+
+Je n'ai eu qu'à ouvrir.
+
+Ils se sont mis en cercle tout seuls. Personne n'a
+parlé. La petite Delorme m'a cherché la main, et
+quand elle l'a eue elle n'a plus bougé.
+
+On écrira que c'est un incident.
+
+Je recommencerai demain.""",
+},
+{
+	"id": "lacaze_defense", "chap": 4, "niveau": -2, "genre": "lettre",
+	"lieu": ["G", "S", "A"],
+	"titre": "Lettre du Dr Lacaze à la direction",
+	"texte": """Monsieur le Directeur,
+
+L'incident du pavillon C ne met pas la cure en cause.
+Il la confirme.
+
+Douze sujets privés de vue se sont rassemblés dans
+l'obscurité totale, sans un mot, en se guidant sur le
+seul souffle de leurs voisins. Aucun sujet ordinaire
+n'en serait capable. C'est précisément le degré
+d'écoute que la Phase III recherche.
+
+Ce qui doit être corrigé n'est pas le traitement,
+mais la surveillance. Une veilleuse qui ouvre les
+portes n'est plus une veilleuse.
+
+Je demande son retrait immédiat du service de nuit.
+
+                                        L. LACAZE""",
+},
+{
+	"id": "pavillon_graffiti", "chap": 4, "niveau": -2, "genre": "mur",
+	"lieu": ["D", "E", "P"],
+	"titre": "Sous la peinture écaillée",
+	"texte": """Douze traits creusés côte à côte, à hauteur
+d'enfant assis. Le douzième est repassé plus
+profond que les autres.
+
+En dessous, d'une autre main, plus haut :
+
+      O N   E S T   T O U S   L À
+
+Et plus bas, minuscule, presque effacé :
+
+      e l l e   a u s s i""",
 },
 ]
 
@@ -390,6 +536,15 @@ func _ready() -> void:
 
 func doc(id: String) -> Dictionary:
 	return _par_id.get(id, {})
+
+
+## Les documents d'un étage donné.
+func du_niveau(niveau: int) -> Array:
+	var v := []
+	for d in DOCUMENTS:
+		if int(d.get("niveau", -1)) == niveau:
+			v.append(d)
+	return v
 
 
 func total() -> int:

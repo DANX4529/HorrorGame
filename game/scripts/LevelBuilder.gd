@@ -947,6 +947,12 @@ func _placer_documents() -> void:
 	var prises: Array[Vector2i] = []
 	var poses: Array[Vector3] = []
 	for d in Lore.DOCUMENTS:
+		# Chaque papier appartient à un étage. Sans ce filtre, le rapport
+		# d'incident du pavillon C se trouverait au service de veille, deux
+		# étages avant qu'il ait un sens — et le récit se lirait dans le
+		# désordre sans que rien ne le signale.
+		if int(d.get("niveau", Etages.premier())) != etage_niveau():
+			continue
 		# Un document déjà lu ne réapparaît pas : chaque descente ne dispose que
 		# ce qui reste à découvrir. Le sanatorium lâche son histoire par
 		# morceaux, et une mise à jour qui ajoute un chapitre redonne d'un coup
@@ -1120,6 +1126,11 @@ func _shuffle(a: Array) -> void:
 # ==========================================================================
 #  Requêtes
 # ==========================================================================
+## Le niveau de l'étage en construction.
+func etage_niveau() -> int:
+	return int(etage.get("niveau", Etages.premier()))
+
+
 func spawn_point() -> Vector3:
 	return world_of(depart.x, depart.y) + depart_ecart
 

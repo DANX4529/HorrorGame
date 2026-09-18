@@ -1091,10 +1091,14 @@ func _run_lore_test() -> void:
 	var places := {}
 	for d in level.document_spawns:
 		places[d["id"]] = d["pos"]
-	print("LORE  graine=%d  documents ecrits=%d  places dans le niveau=%d"
-			% [GameState.graine, Lore.total(), places.size()])
+	# Le périmètre est celui de L'ÉTAGE, pas du récit entier : depuis que
+	# chaque papier appartient à un niveau, exiger que le service de veille
+	# contienne le rapport d'incident du pavillon C reviendrait à exiger un bug.
+	var ici: Array = Lore.du_niveau(level.etage_niveau())
+	print("LORE  etage %d : documents ecrits=%d (sur %d au total)  places=%d"
+			% [level.etage_niveau(), ici.size(), Lore.total(), places.size()])
 	var manquants := []
-	for d in Lore.DOCUMENTS:
+	for d in ici:
 		if not places.has(d["id"]):
 			manquants.append(d["id"])
 	if not manquants.is_empty():
@@ -1207,7 +1211,7 @@ func _run_lore_test() -> void:
 	# --- 4 ter. un document lu ne doit plus reparaitre ---
 	var lus_test := 5
 	for i in lus_test:
-		GameState.lire_document(str(Lore.DOCUMENTS[i]["id"]))
+		GameState.lire_document(str((ici[i] as Dictionary)["id"]))
 	level.document_spawns.clear()
 	level._placer_documents()
 	var restants: int = level.document_spawns.size()
@@ -1216,8 +1220,8 @@ func _run_lore_test() -> void:
 		if GameState.a_lu(str(e["id"])):
 			revenus.append(e["id"])
 	print("LORE  apres %d documents lus : %d places (attendu %d)"
-			% [lus_test, restants, Lore.total() - lus_test])
-	if restants != Lore.total() - lus_test or not revenus.is_empty():
+			% [lus_test, restants, ici.size() - lus_test])
+	if restants != ici.size() - lus_test or not revenus.is_empty():
 		print("LORE  ! des documents deja lus reapparaissent : %s" % str(revenus))
 		ok = false
 	# tout lu : une descente sans document doit rester constructible
@@ -2022,6 +2026,41 @@ func _run_etages_test() -> void:
 		print("ETAGES  ECHEC : impossible de descendre depuis le premier etage")
 		ok = false
 
+	# 8. le récit et les étages disent la même chose
+	#
+	# Un chapitre écrit avec le mauvais « niveau » ne lève rien : ses documents
+	# se placent simplement à un autre étage, ou nulle part. On le verrait en
+	# jouant, des heures plus tard, sans comprendre pourquoi un chapitre reste
+	# vide.
+	var niveaux := {}
+	for e in Etages.ETAGES:
+		niveaux[int(e["niveau"])] = true
+	for d in Lore.DOCUMENTS:
+		var n2 := int(d.get("niveau", 0))
+		if not niveaux.has(n2):
+			print("ETAGES  ECHEC : le document %s est au niveau %d, qui n'existe pas"
+					% [str(d["id"]), n2])
+			ok = false
+	for e in Etages.ETAGES:
+		var niv := int(e["niveau"])
+		var ici: Array = Lore.du_niveau(niv)
+		var chaps: Array = e.get("chapitres", [])
+		var chaps_presents := {}
+		for d in ici:
+			chaps_presents[int(d["chap"])] = true
+		print("ETAGES  %-3d annonce les chapitres %s, contient %s (%d documents)"
+				% [niv, str(chaps), str(chaps_presents.keys()), ici.size()])
+		for c in chaps:
+			if not chaps_presents.has(int(c)):
+				print("ETAGES  ECHEC : le niveau %d annonce le chapitre %d, qui n'y a aucun document"
+						% [niv, int(c)])
+				ok = false
+		for c in chaps_presents:
+			if not (int(c) in chaps):
+				print("ETAGES  ECHEC : le chapitre %d a des documents au niveau %d sans y etre annonce"
+						% [int(c), niv])
+				ok = false
+
 	print("ETAGES RESULTAT : %s" % ("OK" if ok else "ECHEC"))
 	get_tree().quit(0 if ok else 1)
 
@@ -2293,6 +2332,8 @@ func _run_seed_check() -> void:
 
 	var attendus := 0
 	for d in Lore.DOCUMENTS:
+		if int(d.get("niveau", Etages.premier())) != level.etage_niveau():
+			continue
 		if not GameState.a_lu(str(d["id"])):
 			attendus += 1
 	if level.document_spawns.size() != attendus:
