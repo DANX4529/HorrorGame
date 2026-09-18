@@ -47,6 +47,7 @@ var dbg_sauve := false
 var dbg_jet := false
 var dbg_etages := false
 var dbg_correctif := false
+var dbg_reprise := false
 var dbg_doc := ""
 var dbg_tpdoc := -1
 var dbg_seed := 0
@@ -133,6 +134,8 @@ func _parse_cmdline() -> void:
 			dbg_etages = true
 		elif args[i] == "--correctiftest":
 			dbg_correctif = true
+		elif args[i] == "--repristest":
+			dbg_reprise = true
 		elif args[i] == "--doc" and i + 1 < args.size():
 			dbg_doc = args[i + 1]
 		elif args[i] == "--tpdoc" and i + 1 < args.size():
@@ -168,6 +171,21 @@ func _parse_cmdline() -> void:
 
 
 func _build_world() -> void:
+	# L'écran-titre ne montre pas le même bouton selon qu'une descente est en
+	# cours — « Descendre » ou « Reprendre la descente (niveau −2) ». Le test du
+	# menu cherche le premier ; sans ardoise vierge il lit la campagne laissée
+	# par le test précédent et échoue pour une raison étrangère à lui.
+	#
+	# Ici et non dans le test : le menu est CONSTRUIT avant que celui-ci ne
+	# s'exécute. Et seulement au premier passage, car ce test traverse les
+	# écrans en rechargeant la scène — effacer à chaque fois lui ferait perdre
+	# le fil.
+	if dbg_menutest and GameState.test_menu == 0:
+		DirAccess.remove_absolute(GameState.FICHIER_PROGRESSION)
+		GameState.etage_courant = Etages.premier()
+		GameState.etages_termines.clear()
+		GameState.campagne_terminee = false
+		GameState.effacer_point_de_controle()
 	if dbg_lore:
 		# Les documents lus ne réapparaissent plus : ce qui est placé dépend
 		# donc du disque. Le test doit partir d'une ardoise vierge AVANT la
@@ -282,6 +300,8 @@ func _build_world() -> void:
 		_run_etages_test()
 	if dbg_correctif:
 		_run_correctif_test()
+	if dbg_reprise:
+		_run_reprise_test()
 	if dbg_v1:
 		_run_v1_test()
 	if dbg_tactiletest:
@@ -2164,6 +2184,116 @@ func _run_etages_test() -> void:
 		essai.queue_free()
 
 	print("ETAGES RESULTAT : %s" % ("OK" if ok else "ECHEC"))
+	get_tree().quit(0 if ok else 1)
+
+
+## Le point de reprise reste-t-il a SA place ?
+##
+## Il sauvegarde un etat de partie — combien de pieces d'objectif sont posees,
+## sur quel etage, avec quel plan. Rien n'est plus facile que de le laisser
+## fuir d'un etage au suivant : il survit dans un fichier et dans des variables
+## d'autoload, alors que sa validite s'arrete au bas du monte-charge.
+##
+## Quand il fuit, ca ne plante pas — ca VIDE le jeu : l'etage d'en dessous
+## arrive deja alimente, sans une seule piece a trouver, et la campagne entiere
+## se traverse sans objectif.
+func _run_reprise_test() -> void:
+	await get_tree().process_frame
+	var ok := true
+	DirAccess.remove_absolute(GameState.FICHIER_PROGRESSION)
+	GameState.oublier_tout()
+	Settings.difficulte = int(Settings.Diff.VEILLEUR)
+
+	# --- 1. pose : on installe tout l'objectif du premier etage ---
+	GameState.nouvelle_campagne()
+	GameState.reset_run()
+	var haut := GameState.etage_courant
+	var n_haut := GameState.objectif_nombre
+	GameState.fuses_installed = n_haut
+	GameState.poser_point_de_controle()
+	print("REPRISE  etage %d : %d/%d posees, point de controle ecrit"
+			% [haut, GameState.fuses_installed, n_haut])
+	if not GameState.a_un_point_de_controle():
+		print("REPRISE  ECHEC : le point de controle n'a pas ete retenu")
+		ok = false
+
+	# --- 2. mourir puis reprendre rend le MEME etage, deja alimente ---
+	GameState.reprendre()
+	GameState.reset_run()
+	print("REPRISE  apres reprise : etage %d, %d posees, courant=%s"
+			% [GameState.etage_courant, GameState.fuses_installed,
+			   GameState.power_restored])
+	if GameState.etage_courant != haut:
+		print("REPRISE  ECHEC : reprise au niveau %d au lieu de %d"
+				% [GameState.etage_courant, haut])
+		ok = false
+	if GameState.fuses_installed != n_haut or not GameState.power_restored:
+		print("REPRISE  ECHEC : la reprise ne retrouve pas l'etage alimente")
+		ok = false
+
+	# --- 3. DESCENDRE doit invalider le point de reprise ---
+	#
+	# Le coeur du test. Sans cela l'etage d'en dessous herite du compteur de
+	# celui d'au-dessus : il s'ouvre deja alimente, l'objectif affiche « rejoindre
+	# le monte-charge », et plus aucune piece n'est a chercher — ni la, ni aux
+	# etages suivants. Une mort suffisait a vider toute la campagne.
+	GameState.descendre_etage()
+	GameState.reset_run()
+	var bas := GameState.etage_courant
+	print("REPRISE  descendu au niveau %d : %d/%d posees, courant=%s, point de controle=%s"
+			% [bas, GameState.fuses_installed, GameState.objectif_nombre,
+			   GameState.power_restored, GameState.a_un_point_de_controle()])
+	if GameState.fuses_installed != 0:
+		print("REPRISE  ECHEC : %d piece(s) deja posees en arrivant au niveau %d"
+				% [GameState.fuses_installed, bas])
+		ok = false
+	if GameState.power_restored:
+		print("REPRISE  ECHEC : le niveau %d s'ouvre deja alimente" % bas)
+		ok = false
+	if GameState.a_un_point_de_controle():
+		print("REPRISE  ECHEC : le point de controle de l'etage du dessus a survecu a la descente")
+		ok = false
+
+	# --- 4. et une reprise APRES la descente ne doit pas remonter ---
+	GameState.reprendre()
+	if GameState.etage_courant != bas:
+		print("REPRISE  ECHEC : reprendre apres la descente renvoie au niveau %d au lieu de %d"
+				% [GameState.etage_courant, bas])
+		ok = false
+	print("REPRISE  reprise apres descente : niveau %d" % GameState.etage_courant)
+
+	# --- 4 bis. une descente interrompue se retrouve, sans point de reprise ---
+	#
+	# Effacer le point de reprise a la descente etait la correction ; elle
+	# laissait un trou : plus rien ne ramenait a un etage atteint. Quitter le
+	# jeu aux bains aurait alors coute PLUS CHER que d'y mourir, ce qu'aucune
+	# regle n'annonce au joueur.
+	print("REPRISE  descente en cours au niveau %d : proposee=%s"
+			% [GameState.etage_courant, GameState.campagne_en_cours()])
+	if not GameState.campagne_en_cours():
+		print("REPRISE  ECHEC : une descente au niveau %d n'est pas proposee a la reprise"
+				% GameState.etage_courant)
+		ok = false
+	# et elle ne doit PAS l'etre au tout debut, ou il n'y a rien a reprendre
+	var memo := GameState.etage_courant
+	GameState.etage_courant = Etages.premier()
+	if GameState.campagne_en_cours():
+		print("REPRISE  ECHEC : le premier etage est propose comme une descente a reprendre")
+		ok = false
+	GameState.etage_courant = memo
+
+	# --- 5. hors Veilleur, pas de filet ---
+	Settings.difficulte = int(Settings.Diff.PENSIONNAIRE)
+	GameState.fuses_installed = 2
+	GameState.poser_point_de_controle()
+	var offert := GameState.a_un_point_de_controle()
+	print("REPRISE  en Pensionnaire, point de controle offert : %s" % offert)
+	if offert:
+		print("REPRISE  ECHEC : le filet du tableau ne doit exister qu'en Veilleur")
+		ok = false
+	Settings.difficulte = int(Settings.Diff.PATIENT)
+
+	print("REPRISE RESULTAT : %s" % ("OK" if ok else "ECHEC"))
 	get_tree().quit(0 if ok else 1)
 
 

@@ -59,7 +59,7 @@ Dix tests tournent avant chaque publication (`.github/workflows/release.yml`) :
 
 ```
 ambiancetest tactiletest v1test menutest rungame loretest
-lisibilite sauvetest jettest etagetest correctiftest
+lisibilite sauvetest jettest etagetest correctiftest repristest
 ```
 
 Et `--seedcheck` prouve qu'un étage est complétable — à passer sur 40 à 60
@@ -85,6 +85,18 @@ déplaçaient les fusibles.
 Leçon générale : **déclarer qu'un cas est géré ne prouve pas qu'il est
 atteint.** `--etagetest` bâtit désormais chaque étage et vérifie qu'aucune
 lettre ne tombe dans le bras `_`.
+
+## Un test doit partir d'une ardoise vierge
+
+Trois tests ont menti pour la même raison : ils lisaient l'état laissé par le
+test d'avant. `--loretest` examinait l'étage du test précédent, `--menutest`
+cherchait le bouton « Descendre » quand l'écran affichait « Reprendre la
+descente ».
+
+Le piège est toujours le même : **l'autoload a DÉJÀ lu le disque quand le test
+s'exécute.** Effacer `progression.cfg` ne suffit donc pas — il faut aussi
+remettre les variables en mémoire, et le faire dans `_build_world()`, avant
+que menu et niveau ne soient construits.
 
 ## Les mises à jour passent par un correctif
 

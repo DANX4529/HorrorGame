@@ -270,6 +270,14 @@ func _ecran_titre() -> void:
 			GameState.reprendre()
 			_relancer(false), true))
 		_bouton("Recommencer depuis le début", func(): _relancer())
+	elif GameState.campagne_en_cours():
+		# On dit OÙ l'on reprend : « reprendre » sans niveau ne se distingue
+		# pas de « recommencer », et le joueur clique sans savoir ce qu'il perd.
+		_focus(_bouton("Reprendre la descente   (niveau %d)"
+				% GameState.etage_courant, func():
+			GameState.reprendre_campagne()
+			_relancer(false), true))
+		_bouton("Recommencer depuis le début", func(): _relancer())
 	else:
 		_focus(_bouton("Descendre", func(): _relancer(), true))
 	_bouton("Ce qu'on a retrouvé   (%d/%d)"

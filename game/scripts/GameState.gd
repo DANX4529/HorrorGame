@@ -137,6 +137,10 @@ func _ready() -> void:
 		fin_obtenue = str(c.get_value("campagne", "fin", ""))
 		for n in c.get_value("campagne", "etages_termines", []):
 			etages_termines[int(n)] = true
+		# La graine était ÉCRITE et jamais relue. Sans elle, une descente
+		# interrompue ne pouvait pas reprendre son plan : on ne savait plus
+		# quel bâtiment on avait quitté.
+		graine = int(c.get_value("campagne", "graine", 0))
 		_migrer(c)
 	for name in ACTIONS:
 		if not InputMap.has_action(name):
@@ -223,6 +227,23 @@ func poser_point_de_controle() -> void:
 	c.save(FICHIER_PROGRESSION)
 
 
+## Une descente est-elle en cours, plus bas que le premier étage ?
+##
+## Indépendant du point de reprise au tableau, qui ne vaut qu'en Veilleur et
+## seulement une fois une pièce posée. Quelqu'un qui atteint les bains, quitte,
+## et revient doit retrouver sa descente : sinon fermer le jeu coûte plus cher
+## que mourir, ce qu'aucune règle n'annonce.
+func campagne_en_cours() -> bool:
+	return etage_courant != 0 and etage_courant != Etages.premier() \
+			and not campagne_terminee
+
+
+## Reprend la descente là où elle s'est arrêtée. L'étage et la graine ont été
+## relus au démarrage ; il ne reste qu'à ne pas rejouer le prologue.
+func reprendre_campagne() -> void:
+	montrer_prologue = false
+
+
 ## Le point de reprise au tableau ne subsiste qu'en Veilleur.
 ##
 ## Aux deux autres paliers l'ÉTAGE est l'unité de reprise : reprendre au
@@ -241,6 +262,11 @@ func a_un_point_de_controle() -> bool:
 func reprendre() -> void:
 	var c := ConfigFile.new()
 	if c.load(FICHIER_PROGRESSION) != OK:
+		return
+	# Un point effacé laisse derrière lui son étage et sa graine : les remettre
+	# en place renverrait le joueur à un étage qu'il a déjà quitté. On ne
+	# reprend que s'il y a vraiment quelque chose à reprendre.
+	if int(c.get_value("reprise", "fusibles", 0)) <= 0:
 		return
 	reprise_fusibles = int(c.get_value("reprise", "fusibles", 0))
 	reprise_temps = float(c.get_value("reprise", "temps", 0.0))
@@ -365,6 +391,15 @@ func descendre_etage() -> bool:
 	# étage après une mort doit redonner le même plan.
 	graine = randi_range(1, 0x7FFFFFFF)
 	montrer_prologue = false
+	# LE POINT DE REPRISE S'ARRÊTE AU BAS DU MONTE-CHARGE.
+	#
+	# Il retient combien de pièces d'objectif sont posées, sur quel étage et
+	# avec quel plan : trois choses qui cessent d'être vraies dès qu'on descend.
+	# Faute de l'effacer ici, reset_run() rouvrait l'étage suivant avec le
+	# compteur du précédent — donc DÉJÀ ALIMENTÉ, sans une pièce à trouver, et
+	# de proche en proche toute la campagne se traversait sans objectif. Rien ne
+	# plantait : le jeu se vidait, simplement.
+	effacer_point_de_controle()
 	_ecrire_campagne()
 	return true
 
