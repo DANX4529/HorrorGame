@@ -577,6 +577,281 @@ def elevator_gate(name="elevator_gate"):
     return [B.finish(bm, name, ["metal_rust", "metal_painted"])]
 
 
+
+# ==========================================================================
+#  Pavillon C (niveau -2)
+#
+#  Le mobilier d'un SERVICE, pas d'un sous-sol technique : ce qu'on trouve
+#  dans une salle commune, un poste de garde, une lingerie. C'est ce lot qui
+#  fait qu'on sent avoir changé d'étage plutôt que de couloir.
+# ==========================================================================
+def _castors(bm, w, d, z=0.06, mat=1):
+    """Quatre roulettes pivotantes. Tout ce qui roule dans un hôpital en a."""
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            x, y = sx * w * 0.5, sy * d * 0.5
+            B.tube(bm, 0.012, 1, 6, (x, y, z + 0.09), (x, y, z + 0.02), mat=mat)
+            B.cylinder(bm, z, 0.026, 12, center=(x, y, z), rot=(0, PI / 2, 0), mat=mat)
+
+
+def gurney(name="gurney"):
+    """Brancard à roulettes. Plus étroit et plus haut qu'un lit : on le
+    reconnaît de loin, et c'est ce qu'on veut d'un prop de couloir."""
+    W, D, H = 0.66, 1.98, 0.76
+    bm = B.bm_new()
+    B.box(bm, size=(W, D, 0.05), center=(0, 0, H), mat=0)                  # plateau
+    B.box(bm, size=(W - 0.06, D - 0.12, 0.07), center=(0, -0.02, H + 0.06), mat=2)
+    B.box(bm, size=(W - 0.10, 0.44, 0.10), center=(0, D * 0.5 - 0.30, H + 0.12),
+          rot=(-0.34, 0, 0), mat=2)                                        # dossier relevé
+    for sx in (-1, 1):                                                     # piètement en X
+        B.tube(bm, 0.020, 1, 8, (sx * (W * 0.5 - 0.04), -D * 0.5 + 0.16, H),
+               (sx * (W * 0.5 - 0.04), -D * 0.5 + 0.16, 0.14), mat=0)
+        B.tube(bm, 0.020, 1, 8, (sx * (W * 0.5 - 0.04), D * 0.5 - 0.16, H),
+               (sx * (W * 0.5 - 0.04), D * 0.5 - 0.16, 0.14), mat=0)
+        B.tube(bm, 0.016, 1, 6, (sx * (W * 0.5 - 0.04), -D * 0.5 + 0.16, 0.30),
+               (sx * (W * 0.5 - 0.04), D * 0.5 - 0.16, 0.30), mat=0)
+        for sy in (-1, 1):                                                 # barrières
+            B.tube(bm, 0.013, 1, 6,
+                   (sx * W * 0.5, sy * 0.10, H + 0.04), (sx * W * 0.5, sy * 0.10, H + 0.30), mat=0)
+        B.tube(bm, 0.013, 1, 6,
+               (sx * W * 0.5, -0.10, H + 0.30), (sx * W * 0.5, 0.10, H + 0.30), mat=0)
+    _castors(bm, W - 0.08, D - 0.32, 0.07, 1)
+    B.bevel_sharp(bm, 0.003, 1)
+    B.uv_world_box(bm, scale=0.7)
+    return [B.finish(bm, name, ["metal_painted", "metal_rust", "fabric_mattress"],
+                     smooth_angle=True)]
+
+
+def screen(name="screen"):
+    """Paravent d'hôpital, trois panneaux en zigzag. Silhouette immédiatement
+    reconnaissable, et il cache ce qu'il y a derrière."""
+    Hh = 1.72
+    bm = B.bm_new()
+    angles = (-0.45, 0.0, 0.45)
+    x = -0.52
+    for i, a in enumerate(angles):
+        pw = 0.52
+        cx = x + math.cos(a) * pw * 0.5
+        cy = math.sin(a) * pw * 0.5
+        B.box(bm, size=(pw, 0.026, Hh - 0.24), center=(cx, cy, 0.12 + (Hh - 0.24) * 0.5),
+              rot=(0, 0, a), mat=1)                                         # toile
+        for sx in (-1, 1):                                                  # montants
+            mx = x + math.cos(a) * pw * (0.5 + sx * 0.5)
+            my = math.sin(a) * pw * (0.5 + sx * 0.5)
+            B.tube(bm, 0.015, 1, 8, (mx, my, 0.0), (mx, my, Hh), mat=0)
+        B.box(bm, size=(pw, 0.03, 0.035), center=(cx, cy, Hh - 0.03), rot=(0, 0, a), mat=0)
+        x += math.cos(a) * pw
+    B.bevel_sharp(bm, 0.003, 1)
+    B.uv_world_box(bm, scale=0.8)
+    return [B.finish(bm, name, ["metal_painted", "cloth_gown"], smooth_angle=True)]
+
+
+def trolley(name="trolley"):
+    """Chariot de soins à deux plateaux, avec ses cuvettes."""
+    W, D, H = 0.48, 0.66, 0.84
+    bm = B.bm_new()
+    for z in (H, H - 0.34):
+        B.box(bm, size=(W, D, 0.024), center=(0, 0, z), mat=0)
+        B.box(bm, size=(W, 0.02, 0.035), center=(0, -D * 0.5 + 0.01, z + 0.02), mat=0)
+        B.box(bm, size=(W, 0.02, 0.035), center=(0, D * 0.5 - 0.01, z + 0.02), mat=0)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            B.tube(bm, 0.015, 1, 8, (sx * (W * 0.5 - 0.03), sy * (D * 0.5 - 0.03), H),
+                   (sx * (W * 0.5 - 0.03), sy * (D * 0.5 - 0.03), 0.13), mat=0)
+    B.tube(bm, 0.016, 1, 8, (-W * 0.5 - 0.06, -D * 0.5 + 0.06, H + 0.16),
+           (-W * 0.5 - 0.06, D * 0.5 - 0.06, H + 0.16), mat=0)              # poignée
+    for sy in (-1, 1):
+        B.tube(bm, 0.014, 1, 6, (-W * 0.5 - 0.06, sy * (D * 0.5 - 0.06), H + 0.16),
+               (-W * 0.5 + 0.02, sy * (D * 0.5 - 0.06), H), mat=0)
+    B.cylinder(bm, 0.11, 0.055, 14, center=(0.06, -0.14, H + 0.04), mat=1)  # cuvette
+    B.cylinder(bm, 0.075, 0.045, 12, center=(-0.09, 0.16, H + 0.035), mat=1)
+    _castors(bm, W - 0.06, D - 0.06, 0.065, 1)
+    B.bevel_sharp(bm, 0.003, 1)
+    B.uv_world_box(bm, scale=0.6)
+    return [B.finish(bm, name, ["metal_painted", "metal_rust"], smooth_angle=True)]
+
+
+def counter(name="counter"):
+    """Comptoir du poste de garde : c'est le meuble qui dit « ici on
+    surveillait ». Origine au centre, il se pose contre un mur."""
+    W, D, H = 1.86, 0.62, 1.08
+    bm = B.bm_new()
+    B.box(bm, size=(W, D, 0.06), center=(0, 0, H), mat=0)                   # tablette
+    B.box(bm, size=(W - 0.10, D - 0.16, 0.05), center=(0, 0.04, H - 0.32), mat=0)
+    B.box(bm, size=(W, 0.035, H - 0.10), center=(0, -D * 0.5 + 0.02, (H - 0.10) * 0.5), mat=0)
+    for sx in (-1, 1):
+        B.box(bm, size=(0.04, D, H - 0.10), center=(sx * (W * 0.5 - 0.02), 0,
+              (H - 0.10) * 0.5), mat=0)
+    for i in range(3):                                                      # tiroirs
+        x = -0.55 + i * 0.55
+        B.box(bm, size=(0.50, 0.03, 0.20), center=(x, -D * 0.5 - 0.005, H - 0.20), mat=1)
+        B.box(bm, size=(0.16, 0.026, 0.022), center=(x, -D * 0.5 - 0.025, H - 0.20), mat=1)
+    B.box(bm, size=(W, D, 0.04), center=(0, 0, 0.02), mat=1)                # plinthe
+    B.bevel_sharp(bm, 0.004, 1)
+    B.uv_world_box(bm, scale=0.7)
+    return [B.finish(bm, name, ["wood_old", "metal_painted"])]
+
+
+def bench(name="bench"):
+    """Banc d'attente à lattes."""
+    W, D, H = 1.54, 0.40, 0.44
+    bm = B.bm_new()
+    for i in range(4):
+        B.box(bm, size=(W, 0.075, 0.028), center=(0, -D * 0.5 + 0.05 + i * 0.10, H), mat=0)
+    for sx in (-1, 1):
+        x = sx * (W * 0.5 - 0.13)
+        B.box(bm, size=(0.05, D, 0.035), center=(x, 0, H - 0.035), mat=1)
+        for sy in (-1, 1):
+            B.tube(bm, 0.017, 1, 6, (x, sy * (D * 0.5 - 0.05), H - 0.05),
+                   (x, sy * (D * 0.5 - 0.05), 0.0), mat=1)
+        B.tube(bm, 0.014, 1, 6, (x, -D * 0.5 + 0.05, 0.14), (x, D * 0.5 - 0.05, 0.14), mat=1)
+    B.bevel_sharp(bm, 0.003, 1)
+    B.uv_world_box(bm, scale=0.7)
+    return [B.finish(bm, name, ["wood_old", "metal_painted"])]
+
+
+def long_table(name="long_table"):
+    """Table de réfectoire de la salle commune."""
+    W, D, H = 2.10, 0.78, 0.74
+    bm = B.bm_new()
+    B.box(bm, size=(W, D, 0.038), center=(0, 0, H), mat=0)
+    B.box(bm, size=(W - 0.16, 0.05, 0.07), center=(0, 0, H - 0.055), mat=0)
+    for sx in (-1, 1):
+        x = sx * (W * 0.5 - 0.14)
+        for sy in (-1, 1):
+            B.box(bm, size=(0.055, 0.055, H - 0.04), center=(x, sy * (D * 0.5 - 0.10),
+                  (H - 0.04) * 0.5), mat=1)
+        B.box(bm, size=(0.04, D - 0.18, 0.04), center=(x, 0, 0.16), mat=1)
+    B.bevel_sharp(bm, 0.003, 1)
+    B.uv_world_box(bm, scale=0.8)
+    return [B.finish(bm, name, ["wood_old", "metal_painted"])]
+
+
+def shelving(name="shelving"):
+    """Étagère de lingerie, avec ses piles de linge."""
+    W, D, H = 0.94, 0.38, 1.86
+    bm = B.bm_new()
+    for i in range(4):
+        z = 0.22 + i * 0.52
+        B.box(bm, size=(W, D, 0.022), center=(0, 0, z), mat=0)
+        if i < 3:
+            for j in range(2):
+                B.box(bm, size=(0.34, D - 0.10, 0.16),
+                      center=(-0.22 + j * 0.44, 0, z + 0.09),
+                      rot=(0, 0, 0.05 * (1 if j else -1)), mat=1)
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            B.box(bm, size=(0.032, 0.032, H), center=(sx * (W * 0.5 - 0.02),
+                  sy * (D * 0.5 - 0.02), H * 0.5), mat=0)
+    B.bevel_sharp(bm, 0.003, 1)
+    B.uv_world_box(bm, scale=0.7)
+    return [B.finish(bm, name, ["metal_rust", "cloth_gown"])]
+
+
+def laundry_cart(name="laundry_cart"):
+    """Chariot à linge : un bac de toile sur un cadre à roulettes."""
+    W, D, H = 0.72, 0.52, 0.82
+    bm = B.bm_new()
+    for sx in (-1, 1):
+        for sy in (-1, 1):
+            B.tube(bm, 0.016, 1, 8, (sx * (W * 0.5 - 0.04), sy * (D * 0.5 - 0.04), H),
+                   (sx * (W * 0.5 - 0.04), sy * (D * 0.5 - 0.04), 0.13), mat=0)
+    for sy in (-1, 1):
+        B.tube(bm, 0.016, 1, 8, (-W * 0.5 + 0.04, sy * (D * 0.5 - 0.04), H),
+               (W * 0.5 - 0.04, sy * (D * 0.5 - 0.04), H), mat=0)
+    for sx in (-1, 1):
+        B.tube(bm, 0.016, 1, 8, (sx * (W * 0.5 - 0.04), -D * 0.5 + 0.04, H),
+               (sx * (W * 0.5 - 0.04), D * 0.5 - 0.04, H), mat=0)
+    # le sac, affaissé : des parois légèrement rentrantes
+    for sx in (-1, 1):
+        B.box(bm, size=(0.022, D - 0.08, H - 0.30), center=(sx * (W * 0.5 - 0.06), 0,
+              0.15 + (H - 0.30) * 0.5), rot=(0, sx * -0.05, 0), mat=1)
+    for sy in (-1, 1):
+        B.box(bm, size=(W - 0.08, 0.022, H - 0.30), center=(0, sy * (D * 0.5 - 0.06),
+              0.15 + (H - 0.30) * 0.5), rot=(sy * 0.05, 0, 0), mat=1)
+    B.box(bm, size=(W - 0.14, D - 0.14, 0.02), center=(0, 0, 0.16), mat=1)
+    B.box(bm, size=(W - 0.20, D - 0.20, 0.13), center=(0.03, -0.02, H - 0.10), mat=1)
+    _castors(bm, W - 0.08, D - 0.08, 0.065, 0)
+    B.bevel_sharp(bm, 0.003, 1)
+    B.uv_world_box(bm, scale=0.7)
+    return [B.finish(bm, name, ["metal_painted", "cloth_gown"], smooth_angle=True)]
+
+
+def wall_clock(name="wall_clock"):
+    """Horloge de service, arrêtée. Origine au mur (Y=0), dépasse vers -Y."""
+    bm = B.bm_new()
+    B.cylinder(bm, 0.155, 0.055, 24, center=(0, -0.028, 0), rot=(PI / 2, 0, 0), mat=0)
+    B.cylinder(bm, 0.138, 0.010, 24, center=(0, -0.057, 0), rot=(PI / 2, 0, 0), mat=1)
+    B.cylinder(bm, 0.142, 0.012, 24, center=(0, -0.064, 0), rot=(PI / 2, 0, 0), mat=2)
+    for i in range(12):                                                     # index des heures
+        a = i * math.pi / 6.0
+        B.box(bm, size=(0.010, 0.006, 0.020), center=(math.sin(a) * 0.118, -0.062,
+              math.cos(a) * 0.118), rot=(0, -a, 0), mat=0)
+    # Aiguilles arrêtées. Pas à midi : une horloge d'hôpital qui s'est arrêtée
+    # le fait à une heure quelconque, et c'est ce détail qui la rend crédible.
+    for ang, lg, ep in ((0.72, 0.070, 0.009), (3.55, 0.104, 0.006)):
+        B.box(bm, size=(ep, 0.005, lg), center=(math.sin(ang) * lg * 0.5, -0.066,
+              math.cos(ang) * lg * 0.5), rot=(0, -ang, 0), mat=0)
+    B.cylinder(bm, 0.009, 0.010, 10, center=(0, -0.068, 0), rot=(PI / 2, 0, 0), mat=0)
+    B.bevel_sharp(bm, 0.002, 1)
+    B.uv_world_box(bm, scale=0.3)
+    return [B.finish(bm, name, ["wood_old", "paper_aged", "glass_dirty"], smooth_angle=True)]
+
+
+def notice_board(name="notice_board"):
+    """Panneau d'affichage du poste de garde. Origine au mur (Y=0), vers -Y."""
+    W, Hh = 0.86, 0.62
+    bm = B.bm_new()
+    B.box(bm, size=(W, 0.028, Hh), center=(0, -0.014, 0), mat=2)            # liège
+    for sx in (-1, 1):                                                      # cadre
+        B.box(bm, size=(0.035, 0.038, Hh), center=(sx * (W * 0.5 - 0.017), -0.019, 0), mat=0)
+    for sz in (-1, 1):
+        B.box(bm, size=(W, 0.038, 0.035), center=(0, -0.019, sz * (Hh * 0.5 - 0.017)), mat=0)
+    rnd = random.Random(4)                                                  # punaisé de travers
+    for i in range(7):
+        w, h = rnd.uniform(0.11, 0.17), rnd.uniform(0.14, 0.21)
+        B.box(bm, size=(w, 0.002, h),
+              center=(rnd.uniform(-0.30, 0.30), -0.030, rnd.uniform(-0.18, 0.18)),
+              rot=(0, rnd.uniform(-0.09, 0.09), 0), mat=1)
+    B.bevel_sharp(bm, 0.002, 1)
+    B.uv_world_box(bm, scale=0.4)
+    return [B.finish(bm, name, ["wood_old", "paper_aged", "grime_dark"])]
+
+
+def wall_phone(name="wall_phone"):
+    """Téléphone mural en bakélite. Origine au mur (Y=0), dépasse vers -Y."""
+    bm = B.bm_new()
+    B.box(bm, size=(0.17, 0.09, 0.26), center=(0, -0.045, 0), mat=0)        # boîtier
+    B.box(bm, size=(0.13, 0.02, 0.09), center=(0, -0.095, 0.05), mat=0)
+    B.cylinder(bm, 0.052, 0.018, 16, center=(0, -0.098, -0.05), rot=(PI / 2, 0, 0), mat=1)
+    B.box(bm, size=(0.055, 0.052, 0.20), center=(0, -0.118, 0.02), mat=0)   # combiné
+    for sz in (-1, 1):
+        B.cylinder(bm, 0.038, 0.030, 12, center=(0, -0.126, 0.02 + sz * 0.098),
+                   rot=(PI / 2, 0, 0), mat=0)
+    for i in range(6):                                                      # cordon pendant
+        z0 = -0.10 - i * 0.055
+        B.torus(bm, 0.026, 0.006, 10, 5, center=(0.02, -0.11, z0), rot=(PI / 2, 0, 0), mat=0)
+    B.bevel_sharp(bm, 0.002, 1)
+    B.uv_world_box(bm, scale=0.3)
+    return [B.finish(bm, name, ["metal_painted", "metal_rust"], smooth_angle=True)]
+
+
+def coat_rack(name="coat_rack"):
+    """Patère de couloir avec une blouse restée là. Origine au mur, vers -Y."""
+    bm = B.bm_new()
+    B.box(bm, size=(1.08, 0.028, 0.13), center=(0, -0.014, 0), mat=0)
+    for i in range(5):
+        x = -0.42 + i * 0.21
+        B.tube(bm, 0.009, 1, 6, (x, -0.02, 0.02), (x, -0.075, 0.02), mat=1)
+        B.tube(bm, 0.009, 1, 6, (x, -0.075, 0.02), (x, -0.085, -0.035), mat=1)
+    # une blouse suspendue : deux plans qui tombent, légèrement écartés
+    B.box(bm, size=(0.30, 0.05, 0.62), center=(-0.21, -0.075, -0.35), rot=(0.05, 0, 0), mat=2)
+    B.box(bm, size=(0.20, 0.035, 0.34), center=(-0.21, -0.055, -0.70), rot=(-0.04, 0, 0.03), mat=2)
+    B.bevel_sharp(bm, 0.002, 1)
+    B.uv_world_box(bm, scale=0.5)
+    return [B.finish(bm, name, ["wood_old", "metal_rust", "cloth_gown"])]
+
+
 # ==========================================================================
 PROPS = {
     "door": door, "door_metal": door_metal, "locker": locker,
@@ -586,6 +861,11 @@ PROPS = {
     "chair": chair, "desk": desk, "radiator": radiator, "crate": crate,
     "debris": debris, "papers": papers, "pipe_junction": pipe_junction,
     "elevator_gate": elevator_gate,
+    # Pavillon C (niveau -2)
+    "gurney": gurney, "screen": screen, "trolley": trolley, "counter": counter,
+    "bench": bench, "long_table": long_table, "shelving": shelving,
+    "laundry_cart": laundry_cart, "wall_clock": wall_clock,
+    "notice_board": notice_board, "wall_phone": wall_phone, "coat_rack": coat_rack,
 }
 
 

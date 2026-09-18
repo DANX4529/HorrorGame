@@ -148,7 +148,11 @@ func _load_scenes() -> void:
 	for n in ["door", "door_metal", "locker_body", "locker_door", "hospital_bed",
 			"wheelchair", "iv_stand", "cabinet", "ceiling_lamp", "wall_lamp",
 			"fuse_box_body", "fuse_box_door", "fuse", "battery", "chair", "desk",
-			"radiator", "crate", "debris", "papers", "pipe_junction", "elevator_gate"]:
+			"radiator", "crate", "debris", "papers", "pipe_junction", "elevator_gate",
+			# pavillon C (niveau -2)
+			"gurney", "screen", "trolley", "counter", "bench", "long_table",
+			"shelving", "laundry_cart", "wall_clock", "notice_board",
+			"wall_phone", "coat_rack"]:
 		# les casiers et le tableau électrique sont exportés en deux objets
 		# (caisson + porte) mais proviennent d'un même fichier .glb
 		var base: String = n
@@ -192,9 +196,23 @@ func _parse_map() -> void:
 	# du sous-sol devenait inatteignable — fusibles, monte-charge et tableau
 	# compris — et la partie était ingagnable sans qu'aucune erreur n'apparaisse.
 	# Une graine sur vingt au balayage.
+	#
+	# Le carré central ne garantit QUE le centre de la case. Entre deux centres
+	# voisins il reste 2,4 m où un meuble peut se poser en travers : c'est
+	# suffisant tant que le mobilier de couloir est petit et rare, et c'est
+	# ainsi que l'étage -1 a été réglé. Un étage au mobilier plus encombrant
+	# demande mieux, et le demande explicitement — une CROIX, qui réserve le
+	# passage d'un bord à l'autre dans les deux axes.
+	var croix: bool = etage.get("voie_traversante", false)
 	for cell in _cells:
-		if _cells[cell] == "C":
-			_door_zones.append({"pos": world_of(cell.x, cell.y),
+		if _cells[cell] != "C":
+			continue
+		var w := world_of(cell.x, cell.y)
+		if croix:
+			_door_zones.append({"pos": w, "hx": CELL * 0.5, "hz": VOIE_DEMI_LARGEUR})
+			_door_zones.append({"pos": w, "hx": VOIE_DEMI_LARGEUR, "hz": CELL * 0.5})
+		else:
+			_door_zones.append({"pos": w,
 					"hx": VOIE_DEMI_LARGEUR, "hz": VOIE_DEMI_LARGEUR})
 
 
@@ -398,6 +416,54 @@ func _dress_rooms() -> void:
 			"P":      _dress_commune(props, p, cell)
 			"G":      _dress_garde(props, p, cell)
 			"C":      _dress_couloir(props, p, cell)
+		_mobilier_etage(props, p, cell, c)
+
+
+## Mobilier propre à l'étage, posé PAR-DESSUS l'habillage commun.
+##
+## Les salles partagées — dortoirs, archives, réserve, couloirs — ont le même
+## habillage de base d'un étage à l'autre. C'est ce qui donnait au pavillon C
+## l'air d'être le sous-sol repeint : mêmes lits, mêmes casiers, mêmes bureaux.
+## Cette table ajoute ce qui appartient à CET étage-là.
+##
+## Un étage qui n'en déclare pas ne fait aucun tirage supplémentaire, donc sa
+## suite aléatoire — et tout son placement — reste identique au bit près.
+##
+## Format d'une entrée :
+##   prop    nom du .glb
+##   chance  probabilité de pose (1.0 par défaut)
+##   pos     position imposée, relative au centre de la case (meubles muraux)
+##   ecart   rayon de dispersion aléatoire si pos est absent
+##   rot     angle imposé ; absent = orientation libre
+##   boite   encombrement, pour que _prop écarte le meuble d'une baie
+##   unique  un seul pour tout l'étage : un poste de garde de quatre cases ne
+##           veut pas quatre comptoirs, il en veut un
+func _mobilier_etage(p: Node3D, o: Vector3, _cell: Vector2i, lettre: String) -> void:
+	var table: Dictionary = etage.get("mobilier", {})
+	if not table.has(lettre):
+		return
+	for entree in (table[lettre] as Array):
+		var spec: Dictionary = entree
+		# Le tirage a lieu AVANT le filtre d'unicité : la suite aléatoire ne
+		# doit pas dépendre de ce qui a déjà été posé ailleurs, sinon l'ordre
+		# de parcours des cases changerait tout le reste du niveau.
+		var tire: bool = _rng.randf() <= float(spec.get("chance", 1.0))
+		if not tire:
+			continue
+		if bool(spec.get("unique", false)):
+			var cle: String = lettre + ":" + str(spec["prop"])
+			if _mobilier_pose.has(cle):
+				continue
+			_mobilier_pose[cle] = true
+		var pos: Vector3 = o
+		if spec.has("pos"):
+			pos += spec["pos"] as Vector3
+		else:
+			var e: float = float(spec.get("ecart", 1.2))
+			pos += Vector3(_r(-e, e), 0.0, _r(-e, e))
+		var rot: float = float(spec["rot"]) if spec.has("rot") else _r(0.0, TAU)
+		_prop(p, str(spec["prop"]), pos, rot,
+				spec.get("boite", Vector3.ZERO) as Vector3)
 
 
 func _prop(parent: Node3D, name: String, pos: Vector3, rot := 0.0,
@@ -434,6 +500,8 @@ func _prop(parent: Node3D, name: String, pos: Vector3, rot := 0.0,
 var _nav_blockers: Array = []
 var _door_zones: Array = []
 var skipped_props := 0
+## Meubles « unique » déjà posés, par lettre de salle.
+var _mobilier_pose: Dictionary = {}
 
 
 func _same_cell(a: Vector3, b: Vector3) -> bool:
@@ -482,7 +550,8 @@ func _dress_commune(p: Node3D, o: Vector3, cell: Vector2i) -> void:
 	if _rng.randf() < 0.7:
 		_prop(p, "debris", o + Vector3(_r(-1.5, 1.5), 0, _r(-1.5, 1.5)), _r(0, TAU))
 	_prop(p, "radiator", o + Vector3(0, 0, -1.88), 0.0)
-	_add_locker(p, o + Vector3(-1.68, 0, 1.55), PI * 0.5)
+	if _rng.randf() < 0.45:
+		_add_locker(p, o + Vector3(-1.68, 0, 1.55), PI * 0.5)
 
 
 ## Poste de garde : le bureau depuis lequel on veillait le pavillon. C'est de
@@ -496,7 +565,10 @@ func _dress_garde(p: Node3D, o: Vector3, cell: Vector2i) -> void:
 			Vector3(0.76, 1.65, 0.40))
 	if _rng.randf() < 0.85:
 		_prop(p, "papers", o + Vector3(_r(-0.9, 0.9), 0.01, _r(-1.2, 0.2)), _r(0, TAU))
-	_add_locker(p, o + Vector3(1.66, 0, 1.50), -PI * 0.5)
+	# Un vestiaire une case sur deux : à quatre cases, un par case emmurait le
+	# comptoir et le panneau d'affichage derrière une rangée de tôle.
+	if _rng.randf() < 0.5:
+		_add_locker(p, o + Vector3(1.66, 0, 1.50), -PI * 0.5)
 
 
 func _dress_soins(p: Node3D, o: Vector3, cell: Vector2i) -> void:

@@ -141,6 +141,83 @@ const ETAGES := [
 		"veilleuse": {},
 		"lampe": true,
 		"jetables": 7,
+		# Le mobilier du pavillon est plus encombrant que celui du -1 : sans
+		# passage garanti d'un bord à l'autre, un brancard en travers suffit à
+		# couper l'anneau — et deux coupures amputent l'étage entier.
+		"voie_traversante": true,
+
+		# Le mobilier du PAVILLON, par-dessus l'habillage commun. C'est lui qui
+		# fait qu'on sent avoir changé d'étage et non de couloir : un brancard
+		# abandonné en travers, un paravent qui cache ce qu'il y a derrière,
+		# l'horloge du service arrêtée, le comptoir d'où partait la ronde.
+		"mobilier": {
+			"C": [
+				# Le brancard est long de 2 m dans une case de 4 : rare, et
+				# rangé le long du mur plutôt que planté en travers.
+				{"prop": "gurney", "chance": 0.12, "ecart": 1.4, "rot": 0.0,
+				 "boite": Vector3(0.70, 1.10, 2.00)},
+				{"prop": "trolley", "chance": 0.14, "ecart": 1.3,
+				 "boite": Vector3(0.52, 1.00, 0.70)},
+				{"prop": "bench", "chance": 0.10, "ecart": 1.4, "rot": 0.0,
+				 "boite": Vector3(1.55, 0.50, 0.45)},
+				# meubles muraux : contre la face nord de la case, à hauteur d'œil
+				{"prop": "wall_clock", "chance": 0.12, "unique": true,
+				 "pos": Vector3(0, 2.28, -1.93), "rot": 0.0},
+				{"prop": "coat_rack", "chance": 0.12, "unique": true,
+				 "pos": Vector3(0, 1.74, -1.93), "rot": 0.0},
+				{"prop": "wall_phone", "chance": 0.08, "unique": true,
+				 "pos": Vector3(1.1, 1.52, -1.93), "rot": 0.0},
+			],
+			"D": [
+				{"prop": "screen", "chance": 0.55, "ecart": 1.1,
+				 "boite": Vector3(1.20, 1.75, 0.50)},
+				{"prop": "trolley", "chance": 0.34, "ecart": 1.2,
+				 "boite": Vector3(0.52, 1.00, 0.70)},
+				{"prop": "gurney", "chance": 0.22, "ecart": 1.0,
+				 "boite": Vector3(0.70, 1.10, 2.00)},
+			],
+			"E": [
+				{"prop": "screen", "chance": 0.55, "ecart": 1.1,
+				 "boite": Vector3(1.20, 1.75, 0.50)},
+				{"prop": "trolley", "chance": 0.34, "ecart": 1.2,
+				 "boite": Vector3(0.52, 1.00, 0.70)},
+				{"prop": "gurney", "chance": 0.22, "ecart": 1.0,
+				 "boite": Vector3(0.70, 1.10, 2.00)},
+			],
+			"P": [
+				{"prop": "long_table", "chance": 0.72, "unique": true, "ecart": 0.7,
+				 "boite": Vector3(2.15, 0.80, 0.85)},
+				{"prop": "bench", "chance": 0.62, "ecart": 1.1,
+				 "boite": Vector3(1.55, 0.50, 0.45)},
+				{"prop": "wall_clock", "chance": 0.45, "unique": true,
+				 "pos": Vector3(0, 2.28, -1.93), "rot": 0.0},
+			],
+			"G": [
+				{"prop": "counter", "chance": 0.88, "unique": true,
+				 "pos": Vector3(0, 0, -1.30), "rot": 0.0,
+				 "boite": Vector3(1.90, 1.10, 0.65)},
+				{"prop": "notice_board", "chance": 0.75, "unique": true,
+				 "pos": Vector3(-0.9, 1.62, -1.93), "rot": 0.0},
+				{"prop": "wall_phone", "chance": 0.68, "unique": true,
+				 "pos": Vector3(1.2, 1.52, -1.93), "rot": 0.0},
+			],
+			"R": [
+				{"prop": "shelving", "chance": 0.82, "ecart": 1.0,
+				 "boite": Vector3(0.95, 1.90, 0.40)},
+				{"prop": "laundry_cart", "chance": 0.58, "unique": true, "ecart": 1.1,
+				 "boite": Vector3(0.75, 0.90, 0.55)},
+			],
+			"A": [
+				{"prop": "shelving", "chance": 0.48, "ecart": 1.0,
+				 "boite": Vector3(0.95, 1.90, 0.40)},
+				{"prop": "coat_rack", "chance": 0.30, "unique": true,
+				 "pos": Vector3(0, 1.74, -1.93), "rot": 0.0},
+			],
+			"T": [
+				{"prop": "trolley", "chance": 0.30, "ecart": 0.9,
+				 "boite": Vector3(0.52, 1.00, 0.70)},
+			],
+		},
 	},
 ]
 
