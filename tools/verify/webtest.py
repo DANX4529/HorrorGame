@@ -31,7 +31,7 @@ def serve():
         httpd.serve_forever()
 
 
-def main(out, wait_s=90):
+def main(out, wait_s=90, titre="/tmp/web_titre.png"):
     threading.Thread(target=serve, daemon=True).start()
     time.sleep(1.0)
     from playwright.sync_api import sync_playwright
@@ -64,14 +64,40 @@ def main(out, wait_s=90):
                 started = True
                 break
         pg.wait_for_timeout(4000)
-        pg.mouse.click(640, 360)        # démarre le jeu (écran-titre)
-        pg.wait_for_timeout(6000)
+        pg.screenshot(path=titre)
+        # Le bouton « Descendre » est à ~y=429 sur un canvas 1280x720 ; le clic
+        # au centre (y=360) tombait juste au-dessus et ne lançait RIEN. Le test
+        # se contentait alors de l'écran-titre en croyant vérifier une partie.
+        pg.mouse.click(640, 429)
+        pg.wait_for_timeout(5000)
+        # Une sauvegarde neuve passe par le prologue au typewriter : sans le
+        # sauter on capture un écran de texte sur fond noir, et on croirait
+        # avoir vérifié une partie.
+        pg.keyboard.press("Escape")
+        pg.wait_for_timeout(9000)
         pg.screenshot(path=out)
+        # Une descente lancée, c'est un rendu 3D : beaucoup de teintes
+        # distinctes. Un écran-titre, ou un écran figé, en a très peu.
+        try:
+            en_jeu = pg.evaluate("""() => {
+                const c = document.getElementById('canvas');
+                const g = document.createElement('canvas');
+                g.width = 160; g.height = 90;
+                g.getContext('2d').drawImage(c, 0, 0, 160, 90);
+                const d = g.getContext('2d').getImageData(0, 0, 160, 90).data;
+                const s = new Set();
+                for (let i = 0; i < d.length; i += 4)
+                    s.add((d[i] >> 3) + '_' + (d[i+1] >> 3) + '_' + (d[i+2] >> 3));
+                return s.size;
+            }""")
+        except Exception:
+            en_jeu = -1
         br.close()
+    print("teintes distinctes apres clic :", en_jeu)
     print("canvas demarre :", started)
     for l in logs[-25:]:
         print("  ", l[:160])
-    print("capture ->", out)
+    print("captures ->", titre, "et", out)
 
 
 if __name__ == "__main__":
