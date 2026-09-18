@@ -113,8 +113,20 @@ courant, recalcule et se décale légèrement.
 
 ## 4. Objectif
 
-Le monte-charge du sous-sol est la seule sortie. Il lui manque **4 fusibles céramiques**,
-dispersés dans trois ailes du sanatorium.
+Une partie n'est pas une partie : c'est une **descente**. Le monte-charge ne fait
+pas gagner, il emmène plus bas. Chaque étage réclame de réunir un petit nombre de
+pièces, de les poser, et de rejoindre la cabine.
+
+La *forme* ne change pas d'un étage à l'autre — c'est délibéré : ce qui distingue
+les étages, ce sont leurs mécaniques neuves, pas une errance réinventée qu'il
+faudrait réapprendre à chaque fois.
+
+**Ce qu'on lit n'est acquis qu'une fois remonté.** Un document ramassé reste *en
+main* jusqu'au passage de la cabine ; mourir le laisse en bas, et renvoie au début
+de l'étage sur le même plan. C'est là qu'est l'enjeu de la descente.
+
+Au niveau −1, il manque **4 fusibles céramiques** au monte-charge, dispersés dans
+trois ailes.
 
 1. Explorer, trouver les 4 fusibles (points d'apparition semi-aléatoires)
 2. Les insérer dans le tableau électrique du sous-sol
@@ -197,11 +209,25 @@ tremblement de caméra, consommation du souffle ×(1 + heart).
       procéduraux, 10 modules d'architecture, 21 props, 1 personnage riggé,
       41 sons synthétisés.
 
+### Les étages
+
+| Étage | Idée neuve | Objectif |
+|---|---|---|
+| **−1 Le service de veille** | *(l'apprentissage : le souffle, elle)* | 4 fusibles |
+| **−2 Le pavillon C** | **Lancer un objet** pour l'attirer ailleurs | 3 disjoncteurs |
+| −3 Les bains *(à venir)* | Les surfaces : l'eau et le verre portent | 4 vannes |
+| −4 La cure d'obscurité *(à venir)* | Le noir total : la lampe meurt | traverser |
+| −5 La ronde *(à venir)* | Elle repasse où elle vous a entendu | la trouver |
+
+Le plan d'un étage est de la **donnée** (`game/scripts/Etages.gd`), sur le même
+contrat que le récit : agrandir le jeu, c'est ajouter une ligne à la table.
+
 ### Ce qui reste ouvert pour une suite
 
-- Un seul étage : pas d'escaliers ni de navigation verticale.
+- Deux étages sur les cinq prévus (−1 le service de veille, −2 le pavillon C).
+- Le pavillon C n'a pas encore son chapitre : on y trouve les documents restés
+  du niveau −1. Les documents ne sont pas encore rattachés à un étage.
 - Une seule entité et un seul scénario de fin.
-- Pas de sauvegarde, pas de menu d'options.
 - Les casiers sont la seule forme de cachette (pas de dessous-de-lit).
 
 ---
