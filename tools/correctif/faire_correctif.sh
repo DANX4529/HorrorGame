@@ -11,13 +11,19 @@ GODOT="${GODOT:-godot}"
 BASE="$1"
 OUT="${2:-$ROOT/build/correctif.pck}"
 LISTE="$(mktemp)"
-trap 'rm -f "$LISTE"' EXIT
+# Godot ne sait charger un script que DANS le projet : « res://.. » ne sort pas
+# de la racine. On y dépose l'emballeur le temps de la construction.
+EMBAL="$ROOT/game/_faire_correctif.gd"
+trap 'rm -f "$LISTE" "$EMBAL"' EXIT
+cp "$ROOT/tools/correctif/faire_correctif.gd" "$EMBAL"
 
 cd "$ROOT"
 mkdir -p "$(dirname "$OUT")"
 
 # 1. les fichiers du jeu modifiés depuis la base
-CHANGES=$(git diff --name-only "$BASE..HEAD" -- game/ | grep -v '^game/\.godot/' || true)
+# Comparaison avec l'ARBRE DE TRAVAIL et non avec HEAD : on veut pouvoir
+# fabriquer un correctif de ce qu'on vient de corriger, sans commit obligatoire.
+CHANGES=$(git diff --name-only "$BASE" -- game/ | grep -v '^game/\.godot/' || true)
 if [ -z "$CHANGES" ]; then
     echo "rien n'a changé dans game/ depuis $BASE"; exit 1
 fi
@@ -52,6 +58,6 @@ sort -u "$LISTE" -o "$LISTE"
 echo "== $(wc -l < "$LISTE") fichier(s) dans le correctif $BASE -> HEAD"
 
 "$GODOT" --headless --path game \
-    --script res://../tools/correctif/faire_correctif.gd -- "$OUT" "$LISTE"
+    --script res://_faire_correctif.gd -- "$OUT" "$LISTE"
 
 ls -l "$OUT" | awk '{printf "   %s  %.2f Mo\n", $9, $5/1048576}'

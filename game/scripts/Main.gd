@@ -46,6 +46,7 @@ var dbg_lore := false
 var dbg_sauve := false
 var dbg_jet := false
 var dbg_etages := false
+var dbg_correctif := false
 var dbg_doc := ""
 var dbg_tpdoc := -1
 var dbg_seed := 0
@@ -130,6 +131,8 @@ func _parse_cmdline() -> void:
 			dbg_jet = true
 		elif args[i] == "--etagetest":
 			dbg_etages = true
+		elif args[i] == "--correctiftest":
+			dbg_correctif = true
 		elif args[i] == "--doc" and i + 1 < args.size():
 			dbg_doc = args[i + 1]
 		elif args[i] == "--tpdoc" and i + 1 < args.size():
@@ -277,6 +280,8 @@ func _build_world() -> void:
 		_run_jet_test()
 	if dbg_etages:
 		_run_etages_test()
+	if dbg_correctif:
+		_run_correctif_test()
 	if dbg_v1:
 		_run_v1_test()
 	if dbg_tactiletest:
@@ -2159,6 +2164,91 @@ func _run_etages_test() -> void:
 		essai.queue_free()
 
 	print("ETAGES RESULTAT : %s" % ("OK" if ok else "ECHEC"))
+	get_tree().quit(0 if ok else 1)
+
+
+## Le mecanisme de correctif tient-il ses trois promesses ?
+##
+## Un correctif remplace du CODE dans une build deja installee. Si le
+## mecanisme se trompe, il ne rate pas une mise a jour : il casse le jeu de
+## quelqu'un, a distance, sans recours. Les trois proprietes verifiees ici
+## sont donc celles dont depend la securite du procede, pas son confort.
+func _run_correctif_test() -> void:
+	await get_tree().process_frame
+	var ok := true
+
+	# 1. la comparaison de versions
+	#
+	# Comparee comme du texte, « 1.10.0 » passe AVANT « 1.9.0 » : le jeu
+	# refuserait la mise a jour la plus recente en se croyant a jour.
+	var cas := [["1.3.1", "1.3.0", true], ["1.3.0", "1.3.1", false],
+			["1.10.0", "1.9.0", true], ["1.9.0", "1.10.0", false],
+			["1.3.0", "1.3.0", false], ["2.0.0", "1.99.99", true],
+			["1.4.0", "", true]]
+	for c in cas:
+		var att: bool = c[2]
+		var eu: bool = Correctif._plus_recent(str(c[0]), str(c[1]))
+		if eu != att:
+			print("CORRECTIF  ECHEC : « %s plus recent que %s » donne %s, attendu %s"
+					% [c[0], c[1], eu, att])
+			ok = false
+	print("CORRECTIF  comparaison de versions : %d cas" % cas.size())
+
+	# 2. la version de base est bien celle de l'executable
+	var v: String = str(ProjectSettings.get_setting("application/config/version", ""))
+	print("CORRECTIF  version de base lue : %s" % Correctif.version_base)
+	if Correctif.version_base != v:
+		print("CORRECTIF  ECHEC : base %s au lieu de %s" % [Correctif.version_base, v])
+		ok = false
+
+	# 3. une archive se superpose VRAIMENT, et seulement si elle vise cette base
+	#
+	# C'est la propriete qui porte tout le reste : sans elle le correctif se
+	# telecharge, s'annonce installe, et ne change rien.
+	var dir := DirAccess.open("user://")
+	if dir:
+		dir.make_dir_recursive("t_correctif")
+	var marque := "user://t_correctif/preuve.txt"
+	var w := FileAccess.open(marque, FileAccess.WRITE)
+	w.store_string("superpose")
+	w.close()
+	var pck := ProjectSettings.globalize_path("user://t_correctif/essai.pck")
+	var pk := PCKPacker.new()
+	var fait := false
+	if pk.pck_start(pck) == OK:
+		pk.add_file("res://t_preuve.txt", ProjectSettings.globalize_path(marque))
+		fait = pk.flush(false) == OK
+	if not fait:
+		print("CORRECTIF  ECHEC : archive d'essai impossible a ecrire")
+		ok = false
+	else:
+		var avant := FileAccess.file_exists("res://t_preuve.txt")
+		var charge := ProjectSettings.load_resource_pack(pck, true)
+		var apres := FileAccess.file_exists("res://t_preuve.txt")
+		var lu := ""
+		if apres:
+			var r := FileAccess.open("res://t_preuve.txt", FileAccess.READ)
+			if r:
+				lu = r.get_as_text().strip_edges()
+				r.close()
+		print("CORRECTIF  archive : presente avant=%s  chargee=%s  visible apres=%s  contenu=%s"
+				% [avant, charge, apres, lu])
+		if avant or not charge or not apres or lu != "superpose":
+			print("CORRECTIF  ECHEC : l'archive ne se superpose pas au jeu")
+			ok = false
+
+	# 4. le refus d'un correctif prevu pour une autre base
+	Correctif.installer("inexistant.pck", "0.0.0-jamais", "9.9.9")
+	var avant_v := Correctif.version_active
+	Correctif._charger()
+	print("CORRECTIF  marqueur d'une autre base : version active %s -> %s"
+			% [avant_v, Correctif.version_active])
+	if Correctif.version_active != avant_v:
+		print("CORRECTIF  ECHEC : un correctif d'une autre base a ete accepte")
+		ok = false
+	Correctif.oublier()
+
+	print("CORRECTIF RESULTAT : %s" % ("OK" if ok else "ECHEC"))
 	get_tree().quit(0 if ok else 1)
 
 

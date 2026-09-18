@@ -58,8 +58,8 @@ l'aurait laissé passer.
 Dix tests tournent avant chaque publication (`.github/workflows/release.yml`) :
 
 ```
-ambiancetest tactiletest v1test menutest rungame
-loretest lisibilite sauvetest jettest etagetest
+ambiancetest tactiletest v1test menutest rungame loretest
+lisibilite sauvetest jettest etagetest correctiftest
 ```
 
 Et `--seedcheck` prouve qu'un étage est complétable — à passer sur 40 à 60
@@ -85,6 +85,25 @@ déplaçaient les fusibles.
 Leçon générale : **déclarer qu'un cas est géré ne prouve pas qu'il est
 atteint.** `--etagetest` bâtit désormais chaque étage et vérifie qu'aucune
 lettre ne tombe dans le bras `_`.
+
+## Les mises à jour passent par un correctif
+
+Un exécutable pèse 148 Mo dont 0,3 Mo de scripts — ce qui change à presque
+chaque version. On ne republie donc pas le jeu entier : `tools/correctif/`
+emballe dans un `.pck` les seuls fichiers modifiés depuis un tag, et le jeu
+le superpose au lancement.
+
+`Correctif` est **le premier autoload**, et doit le rester : Godot ne
+remplace pas un script déjà chargé en mémoire. Placé plus bas, un correctif
+ne pourrait plus rien changer à Settings, GameState ou Lore.
+
+Un correctif qui ne vise pas la version gravée dans l'exécutable est refusé :
+superposer des fichiers qui n'ont jamais tourné avec cette base ferait pire
+que le défaut qu'ils corrigent.
+
+Le workflow prend un `correctif_depuis` (le tag de base) et attache le `.pck`
+à la release. Éprouvé de bout en bout : une build qui ne contenait pas une
+ligne l'a affichée après 20 Ko de correctif.
 
 ## Chaînes de production
 

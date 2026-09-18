@@ -15,6 +15,10 @@ var _voile: ColorRect
 var _boite: VBoxContainer
 var _ecran: Ecran = Ecran.AUCUN
 var _retour: Ecran = Ecran.TITRE
+## État de la mise à jour, pour l'écran-titre. Vide = rien à proposer.
+var _maj_version := ""
+var _maj_octets := 0
+var _maj_etat := ""          ## "", "encours", "pret"
 var _joueur: Player
 var _defilement: ScrollContainer
 var _principal: Button      ## bouton qui reçoit le focus à l'ouverture de l'écran
@@ -26,6 +30,23 @@ func _ready() -> void:
 	_construire()
 	GameState.phase_changed.connect(_sur_phase)
 	_sur_phase(GameState.phase)
+	# La recherche est silencieuse et sans conséquence si elle échoue : un
+	# joueur hors ligne ne doit rien voir du tout.
+	Correctif.disponible.connect(func(v: String, o: int) -> void:
+		_maj_version = v
+		_maj_octets = o
+		if _ecran == Ecran.TITRE:
+			_afficher(Ecran.TITRE))
+	Correctif.installe_ok.connect(func(_v: String) -> void:
+		_maj_etat = "pret"
+		if _ecran == Ecran.TITRE:
+			_afficher(Ecran.TITRE))
+	Correctif.echec.connect(func(r: String) -> void:
+		_maj_etat = ""
+		push_warning("Mise à jour : %s" % r)
+		if _ecran == Ecran.TITRE:
+			_afficher(Ecran.TITRE))
+	Correctif.verifier()
 
 
 func bind(p: Player) -> void:
@@ -264,6 +285,8 @@ func _ecran_titre() -> void:
 	if not OS.has_feature("web"):
 		_bouton("Quitter", func(): get_tree().quit())
 
+	_ligne_correctif()
+
 	_espace(12)
 	var mt := GameState.meilleur_temps()
 	if mt > 0.0:
@@ -307,6 +330,35 @@ func _ecran_options() -> void:
 		Settings.remettre_defauts()
 		_afficher(Ecran.OPTIONS))
 	_focus(_bouton("Retour", func(): _afficher(_retour), true))
+
+
+## Mise à jour disponible : une ligne, sous les boutons, jamais une fenêtre.
+##
+## Le correctif ne pèse que ce qui a changé — quelques centaines de kilo-octets
+## pour une correction de bugs, là où l'exécutable en fait cent cinquante
+## millions. On le dit, parce qu'un joueur qui a déjà téléchargé 148 Mo une
+## fois n'a aucune raison de deviner que celui-ci sera instantané.
+func _ligne_correctif() -> void:
+	if OS.has_feature("web"):
+		return
+	if Correctif.correctif_charge != "" and Correctif.version_active != Correctif.version_base:
+		_espace(10)
+		_texte("À jour — version %s" % Correctif.version_active, 12, SOURD)
+	if _maj_version == "":
+		return
+	_espace(10)
+	if _maj_etat == "pret":
+		_texte("Mise à jour %s installée — relancez le jeu pour l'appliquer"
+				% _maj_version, 13, OR)
+		return
+	if _maj_etat == "encours":
+		_texte("Téléchargement de la %s…" % _maj_version, 13, SOURD)
+		return
+	_bouton("Mettre à jour vers la %s   (%s)"
+			% [_maj_version, String.humanize_size(_maj_octets)], func():
+		_maj_etat = "encours"
+		Correctif.telecharger()
+		_afficher(Ecran.TITRE))
 
 
 func _ecran_pause() -> void:

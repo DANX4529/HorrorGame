@@ -26,6 +26,10 @@ on:
         description: "Branche ou commit à taguer (défaut : la branche par défaut)"
         required: false
         default: ""
+      correctif_depuis:
+        description: "Tag de base du correctif, ex. v1.3.0. Vide = pas de correctif."
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -110,7 +114,7 @@ jobs:
         run: |
           set -uo pipefail
           echecs=0
-          for t in ambiancetest tactiletest v1test menutest rungame loretest lisibilite sauvetest jettest etagetest; do
+          for t in ambiancetest tactiletest v1test menutest rungame loretest lisibilite sauvetest jettest etagetest correctiftest; do
             sortie=$(timeout 400 xvfb-run -a -s "-screen 0 1280x720x24" \
               godot --path game --rendering-driver opengl3 --resolution 1280x720 \
               -- "--$t" 2>&1 || true)
@@ -141,6 +145,30 @@ jobs:
           ( cd build && zip -9 -qr RESPIRE-web.zip web )
           ls -lh build/RESPIRE-windows.exe build/RESPIRE-windows.zip build/RESPIRE-web.zip
 
+      # Le correctif : ce qui a changé, et rien d'autre.
+      #
+      # Un joueur déjà installé n'a aucune raison de retélécharger 148 Mo pour
+      # 0,3 Mo de scripts corrigés. Le .pck ne contient que les fichiers
+      # modifiés depuis le tag de base, et le jeu le superpose au lancement.
+      # L'étape ne bloque pas la publication si elle échoue : mieux vaut une
+      # release sans correctif qu'une release absente.
+      - name: Fabriquer le correctif
+        id: correctif
+        if: inputs.correctif_depuis != ''
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          BASE="${{ inputs.correctif_depuis }}"
+          git fetch --depth=1 origin "refs/tags/$BASE:refs/tags/$BASE" || true
+          VB=$(git show "$BASE:game/project.godot" | sed -n 's/^config\/version="\(.*\)"/\1/p')
+          VN=$(sed -n 's/^config\/version="\(.*\)"/\1/p' game/project.godot)
+          if [ -z "$VB" ] || [ -z "$VN" ]; then
+            echo "::warning::version de base ou courante illisible, correctif ignoré"; exit 0
+          fi
+          OUT="build/RESPIRE-correctif-$VB-vers-$VN.pck"
+          GODOT=godot ./tools/correctif/faire_correctif.sh "$BASE" "$OUT"
+          echo "fichier=$OUT" >> "$GITHUB_OUTPUT"
+
       - name: Rassembler les notes de version
         id: notes
         run: |
@@ -166,11 +194,13 @@ jobs:
           # au lieu d'échouer, ce qui permet de corriger une publication ratée.
           if gh release view "$TAG" >/dev/null 2>&1; then
             gh release upload "$TAG" --clobber \
-              build/RESPIRE-windows.exe build/RESPIRE-windows.zip build/RESPIRE-web.zip
+              build/RESPIRE-windows.exe build/RESPIRE-windows.zip build/RESPIRE-web.zip \
+              $(ls build/RESPIRE-correctif-*.pck 2>/dev/null || true)
           else
             gh release create "$TAG" \
               --title "RESPIRE $TAG" --notes-file notes.md \
-              build/RESPIRE-windows.exe build/RESPIRE-windows.zip build/RESPIRE-web.zip
+              build/RESPIRE-windows.exe build/RESPIRE-windows.zip build/RESPIRE-web.zip \
+              $(ls build/RESPIRE-correctif-*.pck 2>/dev/null || true)
           fi
           gh release view "$TAG" --json name,assets \
             --jq '.name + " -> " + ([.assets[].name] | join(", "))'
