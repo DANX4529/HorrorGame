@@ -169,9 +169,18 @@ def brick_grid(res, cols=8, rows=8, offset=0.5, mortar=0.035):
     col = np.floor(xx).astype(np.int32)
     fx, fy = xx - np.floor(xx), gy * rows - row
 
-    m = max(mortar, 1e-4)
-    edge = np.minimum.reduce([fx, 1 - fx, fy, 1 - fy])
-    tile = smootherstep_range(edge, m * 0.35, m)
+    # Le joint doit faire AU MOINS deux pixels et demi de large.
+    #
+    # Sous cette largeur il n'est plus échantillonnable : il tombe entièrement
+    # d'un côté du raccord et pas de l'autre, si bien que la texture, tuilable
+    # par construction, montre une rainure sur un seul bord. C'est ce qui se
+    # voyait sur le linoléum, dont le joint mesurait un demi-pixel.
+    px_x = float(cols) / float(res)
+    px_y = float(rows) / float(res)
+    mx = max(mortar, 2.5 * px_x)
+    my = max(mortar, 2.5 * px_y)
+    tile = np.minimum(smootherstep_range(np.minimum(fx, 1 - fx), mx * 0.35, mx),
+                      smootherstep_range(np.minimum(fy, 1 - fy), my * 0.35, my))
     tid = (row * (cols + 7) + col).astype(np.int32)
     return tile.astype(np.float32), tid, (fx.astype(np.float32), fy.astype(np.float32))
 

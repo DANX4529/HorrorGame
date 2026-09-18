@@ -93,13 +93,13 @@ def wall_tile(res=1024, seed=11):
     col *= (1.0 - craze * 0.35)[..., None]
 
     # crasse : s'accumule dans les joints, en bas, et en coulures
-    dirt = N.clamp01(N.fbm(res, 5, 6, seed=seed + 6) * 1.25 - 0.20)
+    dirt = N.clamp01(N.fbm(res, 11, 6, seed=seed + 6) * 1.25 - 0.20)
     dirt = N.clamp01(dirt + grout_m * 0.45 + N.drips(res, 26, seed + 7, drop=0.45) * 0.75)
-    dirt = N.clamp01(dirt * (0.55 + 0.75 * N.fbm(res, 3, 4, seed=seed + 8)))
+    dirt = N.clamp01(dirt * (0.55 + 0.75 * N.fbm(res, 9, 4, seed=seed + 8)))
     col = N.mix_rgb(col, _solid(res, "grime"), dirt * 0.62)
 
     # moisissure verdâtre localisée
-    mold = N.clamp01((N.fbm(res, 4, 6, seed=seed + 9) - 0.60) * 4.0)
+    mold = N.clamp01((N.fbm(res, 13, 6, seed=seed + 9) - 0.60) * 4.0)
     col = N.mix_rgb(col, np.broadcast_to(np.array([0.16, 0.18, 0.12], np.float32),
                                          (res, res, 3)).copy(), mold * 0.55)
 
@@ -202,12 +202,12 @@ def floor_lino(res=1024, seed=41):
     col *= (1.0 - (1.0 - checker) * 0.55)[..., None]   # rainure entre dalles
 
     # usure : chemins de passage et éclats
-    wear = N.clamp01((N.fbm(res, 3, 5, seed=seed + 2) - 0.42) * 2.6)
+    wear = N.clamp01((N.fbm(res, 10, 5, seed=seed + 2) - 0.42) * 2.6)
     col = N.mix_rgb(col, _solid(res, "plaster") * 0.7, wear * 0.45)
     scr = N.scratches(res, 220, seed + 3, length=0.10, width=0.8)
     col *= (1.0 - N.clamp01(scr - 0.45) * 0.5)[..., None]
 
-    lift = N.clamp01((N.fbm(res, 6, 5, seed=seed + 4) - 0.70) * 5.0)
+    lift = N.clamp01((N.fbm(res, 15, 5, seed=seed + 4) - 0.70) * 5.0)
     col = N.mix_rgb(col, _solid(res, "concrete") * 0.55, lift)
     col = N.mix_rgb(col, _solid(res, "grime"), N.drips(res, 18, seed + 5, drop=0.3) * 0.35)
 
@@ -228,14 +228,22 @@ def wood_old(res=1024, seed=51):
     g = N.normalize(rings) * 0.7 + grain_fine * 0.3
 
     col = N.mix_rgb(_solid(res, "wood"), _solid(res, "wood_light"), g)
-    # planches verticales
-    plank, ptid, (pfx, pfy) = N.brick_grid(res, cols=4, rows=1, offset=0.0, mortar=0.012)
+    # Planches VERTICALES : elles courent d'un bord à l'autre, donc il ne doit
+    # pas y avoir de joint horizontal. Avec rows=1, brick_grid en posait un à
+    # fy=0 — c'est-à-dire pile sur le bord de l'image — et deux textures
+    # empilées montraient une barre noire en travers. On ne garde que le joint
+    # en X.
+    xx4 = gx * 4.0
+    pfx = xx4 - np.floor(xx4)
+    ptid = np.floor(xx4).astype(np.int32)
+    mpx = max(0.012, 2.5 * 4.0 / res)
+    plank = N.smootherstep_range(np.minimum(pfx, 1 - pfx), mpx * 0.35, mpx)
     col *= (0.75 + 0.5 * N.per_tile_random(ptid, seed + 4, 0.4, 1.0))[..., None]
     col *= (1.0 - (1 - plank) * 0.7)[..., None]
 
     scr = N.scratches(res, 130, seed + 5, length=0.14, width=0.7)
     col *= (1.0 - N.clamp01(scr - 0.5) * 0.45)[..., None]
-    dirt = N.clamp01((N.fbm(res, 4, 5, seed=seed + 6) - 0.48) * 2.4)
+    dirt = N.clamp01((N.fbm(res, 12, 5, seed=seed + 6) - 0.48) * 2.4)
     col = N.mix_rgb(col, _solid(res, "grime"), dirt * 0.5)
 
     h = 0.55 + g * 0.10 - (1 - plank) * 0.35 - N.clamp01(scr - 0.5) * 0.2
@@ -488,8 +496,8 @@ def bath_tile(res=1024, seed=201):
     # Tartre : des plaques, PAS un dégradé vertical. Le carrelage se répète sur
     # trois mètres de haut ; un dégradé se lirait comme des bandes régulières,
     # ce qui est exactement ce qu'une texture tuilable ne doit pas faire.
-    tartre = N.clamp01((N.fbm(res, 4, 6, seed=seed + 6) - 0.50) * 3.6)
-    tartre = N.clamp01(tartre + N.clamp01((N.fbm(res, 9, 4, seed=seed + 10) - 0.62) * 3.0) * 0.6)
+    tartre = N.clamp01((N.fbm(res, 12, 6, seed=seed + 6) - 0.50) * 3.6)
+    tartre = N.clamp01(tartre + N.clamp01((N.fbm(res, 19, 4, seed=seed + 10) - 0.62) * 3.0) * 0.6)
     col = N.mix_rgb(col, np.broadcast_to(np.array([0.878, 0.882, 0.847], np.float32),
                                          (res, res, 3)).copy(), tartre * 0.70)
 
@@ -519,7 +527,7 @@ def bath_floor(res=1024, seed=211):
     # flaques : des zones franchement plus sombres et beaucoup plus lisses.
     # C'est le même masque qui assombrit et qui polit — sinon l'eau se voit
     # comme une tache de peinture au lieu d'une surface mouillée.
-    flaque = N.clamp01((N.fbm(res, 3, 5, seed=seed + 4) - 0.46) * 3.2)
+    flaque = N.clamp01((N.fbm(res, 8, 5, seed=seed + 4) - 0.46) * 3.2)
     flaque = N.blur(flaque, 2.0)
     col = N.mix_rgb(col, _solid(res, "eau_sombre"), flaque * 0.72)
 
