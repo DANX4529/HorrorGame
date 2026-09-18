@@ -66,7 +66,7 @@ const CREDITS := [
 	["", [
 		"RESPIRE",
 		"Sanatorium du Mont-Cendre — 1961",
-		"version 1.3.0",
+		"version 1.3.1",
 	]],
 	["Conception, écriture et réalisation", [
 		"Liam RIIS",

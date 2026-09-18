@@ -23,6 +23,20 @@ mkdir -p "$(dirname "$OUT")"
 # 1. les fichiers du jeu modifiés depuis la base
 # Comparaison avec l'ARBRE DE TRAVAIL et non avec HEAD : on veut pouvoir
 # fabriquer un correctif de ce qu'on vient de corriger, sans commit obligatoire.
+# La base sait-elle seulement charger un correctif ?
+#
+# Le chargeur est un AUTOLOAD, donc déclaré dans project.godot — un fichier que
+# le moteur lit avant qu'un correctif puisse exister, et qui est pour cette
+# raison exclu des correctifs. Une version antérieure au chargeur ne peut donc
+# rien recevoir, jamais : lui fabriquer un correctif produirait un fichier que
+# personne ne peut appliquer, et des notes de version qui promettent à tort.
+if ! git show "$BASE:game/project.godot" 2>/dev/null | grep -q '^Correctif='; then
+    echo "ERREUR : $BASE n'a pas l'autoload Correctif." >&2
+    echo "         Cette version ne sait pas charger de correctif : ses joueurs" >&2
+    echo "         doivent télécharger le jeu entier une dernière fois." >&2
+    exit 3
+fi
+
 CHANGES=$(git diff --name-only "$BASE" -- game/ | grep -v '^game/\.godot/' || true)
 if [ -z "$CHANGES" ]; then
     echo "rien n'a changé dans game/ depuis $BASE"; exit 1
@@ -39,7 +53,11 @@ while IFS= read -r f; do
     [ -z "$f" ] && continue
     rel="${f#game/}"
     case "$rel" in
-        .godot/*|export_presets.cfg) continue ;;
+        # project.godot est lu par le moteur AVANT qu'un correctif puisse se
+        # charger : l'emballer ne changerait rien et ferait croire le
+        # contraire. C'est pourquoi la version jouée est lue dans le marqueur
+        # du correctif, et non dans les réglages du projet.
+        .godot/*|export_presets.cfg|project.godot) continue ;;
         *.import)
             src="${rel%.import}"
             echo "res://$rel" >> "$LISTE"
