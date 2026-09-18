@@ -16,7 +16,7 @@ Jeu d'horreur psychologique à la première personne. **Elle est aveugle. Elle c
 |---|---|---|
 | **`RESPIRE-windows.exe`** | 149 Mo | Première installation. Double-cliquez, ça se lance. |
 | `RESPIRE-windows.zip` | 77 Mo | Même jeu, moitié moins lourd à télécharger. |
-| `RESPIRE-correctif-1.3.1-vers-1.3.2.pck` | TAILLE_PCK | Récupéré tout seul par le jeu. Rien à faire à la main. |
+| `RESPIRE-correctif-1.3.1-vers-1.3.2.pck` | 0,2 Mo | Récupéré tout seul par le jeu. Rien à faire à la main. |
 
 Windows peut afficher un avertissement SmartScreen : l'exécutable n'est pas signé. **Informations complémentaires → Exécuter quand même.**
 
